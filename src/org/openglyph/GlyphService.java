@@ -29,6 +29,8 @@ import org.openglyph.core.MatrixLayout;
 import org.openglyph.core.Renderer;
 import org.openglyph.core.SysfsMatrixSink;
 import org.openglyph.effects.Effects;
+import org.openglyph.core.AppPatterns;
+import org.openglyph.toys.IdleLayer;
 import org.openglyph.toys.Toy;
 import org.openglyph.toys.ToyHost;
 import org.openglyph.toys.Toys;
@@ -59,6 +61,10 @@ public final class GlyphService extends Service {
     private RecordingLedController mRecordLed;
     private final ToyHost mToys = new ToyHost(this::toyContext,
             new Toys.Clock(), new Toys.Battery(), new Toys.Stopwatch());
+    private final IdleLayer mIdle = new IdleLayer(this::toyContext);
+    private IdleController mIdleController;
+    private volatile Map<String, String> mAppPatterns = new HashMap<>();
+    private volatile java.util.Set<String> mEssentialApps = new java.util.HashSet<>();
 
     static GlyphService get() {
         return sInstance;
@@ -73,6 +79,8 @@ public final class GlyphService extends Service {
         mRenderer.add(mCharging);
         mRenderer.add(mCall);
         mRenderer.add(mToys);
+        mRenderer.add(mIdle);
+        mIdleController = new IdleController(this, mHandler, mIdle, mRenderer::invalidate);
         applySettings();
         List<String> keys = new ArrayList<>(List.of(GlyphSettings.ALL));
         for (Toy t : mToys.allToys()) keys.add(GlyphSettings.toyKey(t.id()));
@@ -83,6 +91,7 @@ public final class GlyphService extends Service {
 
         mRecordLed = new RecordingLedController(this, mHandler);
         mRecordLed.start();
+        mIdleController.start();
 
         registerReceiver(mPowerReceiver, new IntentFilter(Intent.ACTION_POWER_CONNECTED));
         // Sent by the device KeyHandler in system_server; same uid, so PERMISSION holds for it.
@@ -112,6 +121,7 @@ public final class GlyphService extends Service {
         unregisterReceiver(mButtonReceiver);
         getContentResolver().unregisterContentObserver(mSettingsObserver);
         mRecordLed.stop();
+        mIdleController.stop();
         mRenderer.stop();
         super.onDestroy();
     }
@@ -127,9 +137,20 @@ public final class GlyphService extends Service {
     }
 
     /** Called by the notification listener for each alert-worthy notification. */
-    void onNotification() {
+    void onNotification(String pkg) {
         if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.NOTIFICATIONS)) return;
-        mPulse.trigger(SystemClock.uptimeMillis());
+        Effects.Pattern pattern = Effects.Pattern.parse(mAppPatterns.get(pkg), Effects.Pattern.RING);
+        mPulse.trigger(SystemClock.uptimeMillis(), pattern);
+        mRenderer.invalidate();
+    }
+
+    boolean isEssentialApp(String pkg) {
+        return mEssentialApps.contains(pkg);
+    }
+
+    /** Called by the listener whenever the set of waiting essential notifications changes. */
+    void setEssentialWaiting(boolean waiting) {
+        mIdle.setEssential(waiting);
         mRenderer.invalidate();
     }
 
@@ -139,7 +160,13 @@ public final class GlyphService extends Service {
         List<String> ids = new ArrayList<>();
         for (Toy t : mToys.allToys()) ids.add(t.id());
         mToys.setEnabled(GlyphSettings.enabledToys(getContentResolver(), ids));
+        mAppPatterns = AppPatterns.parse(
+                GlyphSettings.string(getContentResolver(), GlyphSettings.APP_PATTERNS, ""));
+        mEssentialApps = AppPatterns.parseSet(
+                GlyphSettings.string(getContentResolver(), GlyphSettings.ESSENTIAL_APPS, ""));
+        GlyphNotificationListener.refreshEssential();
         if (mRecordLed != null) mRecordLed.update();
+        if (mIdleController != null) mIdleController.update();
         mRenderer.invalidate();
     }
 

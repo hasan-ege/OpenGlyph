@@ -15,12 +15,35 @@ public final class Effects {
         return Math.hypot(x - CX, y - CY);
     }
 
-    /** Two outward rings, then gone. Triggered for each new notification. */
+    /** How a notification looks; chosen per app (see the service's pattern setting). */
+    public enum Pattern {
+        RING,  // two outward rings (default)
+        SWEEP, // a radius sweeping round once
+        DOT,   // centre dot blinking twice
+        FLASH; // whole matrix flashing twice
+
+        public static Pattern parse(String s, Pattern fallback) {
+            if (s == null) return fallback;
+            try {
+                return valueOf(s.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                return fallback;
+            }
+        }
+    }
+
+    /** One notification, drawn with its app's pattern, then gone. */
     public static final class NotificationPulse implements Effect {
         static final long DURATION_MS = 1600;
         private volatile long startMs = Long.MIN_VALUE;
+        private volatile Pattern pattern = Pattern.RING;
 
         public void trigger(long nowMs) {
+            trigger(nowMs, Pattern.RING);
+        }
+
+        public void trigger(long nowMs, Pattern pattern) {
+            this.pattern = pattern;
             startMs = nowMs;
         }
 
@@ -31,16 +54,52 @@ public final class Effects {
         }
 
         @Override public long render(Frame f, long now) {
-            double t = ((now - startMs) % 800) / 800.0; // two 800 ms rings
-            double radius = t * 13.0;
-            int peak = (int) (Frame.MAX * (1.0 - t));
+            long t = now - startMs;
+            switch (pattern) {
+                case SWEEP -> sweep(f, t / (double) DURATION_MS);
+                case DOT -> dot(f, t);
+                case FLASH -> flash(f, t);
+                default -> rings(f, t);
+            }
+            return 33;
+        }
+
+        private static void rings(Frame f, long t) {
+            double phase = (t % 800) / 800.0; // two 800 ms rings
+            double radius = phase * 13.0;
+            int peak = (int) (Frame.MAX * (1.0 - phase));
             for (int y = 0; y < MatrixLayout.HEIGHT; y++) {
                 for (int x = 0; x < MatrixLayout.WIDTH; x++) {
                     double d = Math.abs(dist(x, y) - radius);
                     if (d < 1.5) f.set(x, y, (int) (peak * (1.0 - d / 1.5)));
                 }
             }
-            return 33;
+        }
+
+        private static void sweep(Frame f, double phase) {
+            double head = phase * 2 * Math.PI; // clockwise from 12 o'clock
+            for (int y = 0; y < MatrixLayout.HEIGHT; y++) {
+                for (int x = 0; x < MatrixLayout.WIDTH; x++) {
+                    if (dist(x, y) > 12.6) continue;
+                    double a = Math.atan2(x - CX, CY - y);
+                    if (a < 0) a += 2 * Math.PI;
+                    double behind = head - a;
+                    if (behind < 0) behind += 2 * Math.PI;
+                    if (behind < 1.2) f.set(x, y, (int) (Frame.MAX * (1.0 - behind / 1.2)));
+                }
+            }
+        }
+
+        private static void dot(Frame f, long t) {
+            if ((t / 400) % 2 == 1) return; // on 400 ms, off 400 ms, twice
+            for (int y = 9; y <= 15; y++)
+                for (int x = 9; x <= 15; x++)
+                    if (dist(x, y) <= 3.2) f.set(x, y, Frame.MAX);
+        }
+
+        private static void flash(Frame f, long t) {
+            double phase = (t % 800) / 800.0;
+            f.fill((int) (Frame.MAX * 0.8 * Math.max(0, 1.0 - phase * 1.6)));
         }
     }
 

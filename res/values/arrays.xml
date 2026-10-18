@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="aod_entries">
+        <item>@string/aod_off</item>
+        <item>@string/aod_always</item>
+        <item>@string/aod_face_down</item>
+        <item>@string/aod_charging</item>
+    </string-array>
+    <string-array name="aod_values" translatable="false">
+        <item>OFF</item>
+        <item>ALWAYS</item>
+        <item>FACE_DOWN</item>
+        <item>CHARGING</item>
+    </string-array>
+
+    <!-- start-end hours; "off" = no quiet period -->
+    <string-array name="quiet_entries">
+        <item>@string/quiet_off</item>
+        <item>22:00 – 07:00</item>
+        <item>23:00 – 07:00</item>
+        <item>00:00 – 07:00</item>
+        <item>23:00 – 08:00</item>
+    </string-array>
+    <string-array name="quiet_values" translatable="false">
+        <item>off</item>
+        <item>22-7</item>
+        <item>23-7</item>
+        <item>0-7</item>
+        <item>23-8</item>
+    </string-array>
+
+    <string-array name="pattern_entries">
+        <item>@string/pattern_default</item>
+        <item>@string/pattern_ring</item>
+        <item>@string/pattern_sweep</item>
+        <item>@string/pattern_dot</item>
+        <item>@string/pattern_flash</item>
+    </string-array>
+    <string-array name="pattern_values" translatable="false">
+        <item>DEFAULT</item>
+        <item>RING</item>
+        <item>SWEEP</item>
+        <item>DOT</item>
+        <item>FLASH</item>
+    </string-array>
+</resources>

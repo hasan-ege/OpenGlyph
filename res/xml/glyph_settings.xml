@@ -58,6 +58,50 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="nothing_style"
+        android:title="@string/settings_always_on_category">
+
+        <ListPreference
+            android:key="open_glyph_aod"
+            android:title="@string/settings_aod"
+            android:entries="@array/aod_entries"
+            android:entryValues="@array/aod_values"
+            android:defaultValue="OFF"
+            app:useSimpleSummaryProvider="true"
+            android:persistent="false" />
+
+        <ListPreference
+            android:key="quiet_hours"
+            android:title="@string/settings_quiet_hours"
+            android:entries="@array/quiet_entries"
+            android:entryValues="@array/quiet_values"
+            app:useSimpleSummaryProvider="true"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_flip"
+            android:title="@string/settings_flip"
+            android:summary="@string/settings_flip_summary"
+            android:persistent="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="notification_style"
+        android:title="@string/settings_notification_style">
+
+        <MultiSelectListPreference
+            android:key="open_glyph_essential_apps"
+            android:title="@string/settings_essential"
+            android:summary="@string/settings_essential_summary"
+            android:persistent="false" />
+
+        <Preference
+            android:key="app_patterns"
+            android:title="@string/settings_patterns"
+            android:summary="@string/settings_patterns_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:key="toys"
         android:title="@string/settings_toys">
 

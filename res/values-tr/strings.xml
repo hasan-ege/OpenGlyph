@@ -26,4 +26,25 @@
     <string name="toy_stopwatch">Kronometre</string>
     <string name="toy_stopwatch_summary">Uzun basış: başlat, durdur, sıfırla</string>
     <string name="settings_footer">Glyph oyuncakları kapalıyken Glyph Button\'a basmak pil seviyesini gösterir.</string>
+
+    <string name="settings_always_on_category">Her zaman açık ve Flip to Glyph</string>
+    <string name="settings_aod">Her zaman açık Glyph</string>
+    <string name="aod_off">Kapalı</string>
+    <string name="aod_always">Ekran kapalıyken her zaman</string>
+    <string name="aod_face_down">Yüzüstü konunca</string>
+    <string name="aod_charging">Şarj olurken</string>
+    <string name="settings_quiet_hours">Sessiz saatler (her zaman açık kapalı)</string>
+    <string name="quiet_off">Yok</string>
+    <string name="settings_flip">Flip to Glyph</string>
+    <string name="settings_flip_summary">Yüzüstü: zil sessiz, bildirimler sadece matriste</string>
+    <string name="settings_notification_style">Bildirim ışıkları</string>
+    <string name="settings_essential">Önemli bildirimler</string>
+    <string name="settings_essential_summary">Bu uygulamaların bildirimi kapatılana kadar bir nokta yanık kalır</string>
+    <string name="settings_patterns">Uygulamaya özel desenler</string>
+    <string name="settings_patterns_summary">Her uygulama için halka, süpürme, nokta ya da flaş</string>
+    <string name="pattern_default">Varsayılan (halka)</string>
+    <string name="pattern_ring">Halka</string>
+    <string name="pattern_sweep">Süpürme</string>
+    <string name="pattern_dot">Nokta</string>
+    <string name="pattern_flash">Flaş</string>
 </resources>

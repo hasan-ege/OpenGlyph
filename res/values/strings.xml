@@ -27,4 +27,25 @@
     <string name="toy_stopwatch">Stopwatch</string>
     <string name="toy_stopwatch_summary">Long press: start, stop, reset</string>
     <string name="settings_footer">With Glyph toys off, pressing the Glyph Button shows the battery level.</string>
+
+    <string name="settings_always_on_category">Always-on and Flip to Glyph</string>
+    <string name="settings_aod">Always-on Glyph</string>
+    <string name="aod_off">Off</string>
+    <string name="aod_always">Whenever the screen is off</string>
+    <string name="aod_face_down">When placed face down</string>
+    <string name="aod_charging">While charging</string>
+    <string name="settings_quiet_hours">Quiet hours (always-on off)</string>
+    <string name="quiet_off">None</string>
+    <string name="settings_flip">Flip to Glyph</string>
+    <string name="settings_flip_summary">Face down: ringer silent, notifications only on the matrix</string>
+    <string name="settings_notification_style">Notification lights</string>
+    <string name="settings_essential">Essential notifications</string>
+    <string name="settings_essential_summary">A dot stays lit until these apps\' notifications are dismissed</string>
+    <string name="settings_patterns">Per-app patterns</string>
+    <string name="settings_patterns_summary">Ring, sweep, dot or flash for each app</string>
+    <string name="pattern_default">Default (ring)</string>
+    <string name="pattern_ring">Ring</string>
+    <string name="pattern_sweep">Sweep</string>
+    <string name="pattern_dot">Dot</string>
+    <string name="pattern_flash">Flash</string>
 </resources>

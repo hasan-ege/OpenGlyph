@@ -38,6 +38,7 @@ public final class HostTests {
         timerLed();
         recordingDetector();
         toys();
+        nothingStyleFeatures();
         System.out.println(failures == 0 ? "\nALL PASSED" : "\n" + failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }
@@ -95,6 +96,61 @@ public final class HostTests {
         host.setEnabled(java.util.Set.of());
         host.onTap(90000);
         check(!host.isActive(90000), "no enabled toys: nothing shows");
+    }
+
+    static void nothingStyleFeatures() {
+        // Per-app notification patterns
+        for (Effects.Pattern p : Effects.Pattern.values()) {
+            Effects.NotificationPulse pulse = new Effects.NotificationPulse();
+            pulse.trigger(0, p);
+            Frame f = new Frame();
+            pulse.render(f, 200);
+            check(!f.isDark(), "pattern " + p + " draws something");
+        }
+        check(Effects.Pattern.parse("sweep", Effects.Pattern.RING) == Effects.Pattern.SWEEP
+                && Effects.Pattern.parse("bogus", Effects.Pattern.RING) == Effects.Pattern.RING,
+                "pattern parsing with fallback");
+        java.util.Map<String, String> m = AppPatterns.parse("com.whatsapp=SWEEP;bad;org.tg=DOT;=X");
+        check(m.size() == 2 && m.get("com.whatsapp").equals("SWEEP"), "app pattern setting parses");
+        check(AppPatterns.parse(AppPatterns.format(m)).equals(m), "app pattern setting round-trips");
+        check(AppPatterns.parseSet("a, b,,c").equals(new java.util.LinkedHashSet<>(java.util.List.of("a", "b", "c"))),
+                "essential app set parses");
+
+        // Always-on policy
+        check(AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, 14, 23, 7),
+                "ALWAYS shows with the screen off");
+        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, false, false, false, 14, 23, 7),
+                "never while the screen is on");
+        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, 2, 23, 7),
+                "quiet period across midnight hides it");
+        check(AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, 7, 23, 7),
+                "quiet period ends at its end hour");
+        check(AodPolicy.shouldShow(AodPolicy.Mode.FACE_DOWN, true, true, false, 14, -1, -1)
+                && !AodPolicy.shouldShow(AodPolicy.Mode.FACE_DOWN, true, false, false, 14, -1, -1),
+                "FACE_DOWN follows orientation");
+        check(AodPolicy.shouldShow(AodPolicy.Mode.CHARGING, true, false, true, 14, -1, -1),
+                "CHARGING follows the charger");
+        check(AodPolicy.isFaceDown(0.3f, -0.5f, -9.7f) && !AodPolicy.isFaceDown(0, 0, 9.8f)
+                && !AodPolicy.isFaceDown(6f, 0, -7f), "face-down detection");
+        check(!AodPolicy.isFaceUp(0, 0, -6f) && AodPolicy.isFaceUp(0, 0, 2f), "face-up hysteresis");
+
+        // Idle layer: dim clock + essential dot
+        org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
+        ctx.hour = 12; ctx.minute = 34;
+        org.openglyph.toys.IdleLayer idle = new org.openglyph.toys.IdleLayer(() -> ctx);
+        check(!idle.isActive(0), "idle layer off by default");
+        idle.setAlwaysOn(true);
+        Frame f = new Frame();
+        idle.render(f, 0);
+        int max = 0;
+        for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) max = Math.max(max, f.get(x, y));
+        check(max > 0 && max < Frame.MAX / 3, "always-on clock is dimmed");
+        idle.setAlwaysOn(false);
+        idle.setEssential(true);
+        f.clear();
+        idle.render(f, 0);
+        check(idle.isActive(0) && f.get(12, 22) > 0 && f.get(12, 4) == 0, "essential dot alone");
+        check(new Effects.NotificationPulse().priority() > idle.priority(), "notifications draw over idle");
     }
 
     static void timerLed() throws Exception {
