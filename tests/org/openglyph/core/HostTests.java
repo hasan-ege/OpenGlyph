@@ -321,6 +321,21 @@ public final class HostTests {
         check(Math.abs(org.openglyph.toys.Sky.moonPhase(1761049500000L)) < 0.03
                 || org.openglyph.toys.Sky.moonPhase(1761049500000L) > 0.97, "moon phase on a known new moon");
 
+        // Rock, Paper, Scissors: the shake counts with dots, then the picked hand stays.
+        org.openglyph.toys.Toys.RockPaperScissors rps = new org.openglyph.toys.Toys.RockPaperScissors(new java.util.Random(3));
+        org.openglyph.toys.Toy.Context still = new org.openglyph.toys.Toy.Context();
+        rps.onLongPress(0);
+        Frame shaking = new Frame();
+        rps.render(shaking, 400, still);
+        check(shaking.get(10, 22) == Frame.MAX && shaking.get(12, 22) == Frame.MAX && shaking.get(14, 22) < Frame.MAX,
+                "rps: two of the three count dots lit on the second bob");
+        Frame shown = new Frame(), expect = new Frame();
+        rps.render(shown, 1500, still);
+        org.openglyph.toys.Toys.RockPaperScissors.hand(expect, rps.pick(), 0, 0.82 + 0.18 * Math.cos((1500 - 990 - 260) / 1000.0 * Math.PI * 1.6));
+        check(shown.toAscii().equals(expect.toAscii()) && !shown.isDark() && rps.keepsScreenOn(3000) && !rps.keepsScreenOn(6000),
+                "rps: the picked hand stays for a few seconds");
+        System.out.println("\nRPS reveal:\n" + shown.toAscii());
+
         // Bottle spins and stops; Feed The Fly eats and scores
         org.openglyph.toys.Toys.Bottle bottle = new org.openglyph.toys.Toys.Bottle();
         bottle.onLongPress(0);

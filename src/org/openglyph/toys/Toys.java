@@ -226,23 +226,76 @@ public final class Toys {
         @Override public long frameIntervalMs() { return spinStart == Long.MIN_VALUE ? -1 : 33; }
     }
 
-    /** Rock, Paper, Scissors: long press (or three shakes) counts down and shows a hand. */
+    /**
+     * Rock, Paper, Scissors. Idle: the three hands take turns. Long press (or three shakes):
+     * the fist bobs three times while dots count "rock, paper, scissors", then the phone's hand
+     * sweeps in behind a closing ring and stays, breathing, for a few seconds.
+     * Hands: bright outline, dim fill (tools/generator/rps.html shows the animation).
+     */
     public static final class RockPaperScissors implements Toy {
-        static final String[] ROCK = {
-            "...#####...", "..#######..", ".#########.", ".#########.", "###########",
-            "###########", "###########", ".#########.", ".#########.", "..#######..",
-            "...#####...",
+        static final String[] ROCK = { // rows 7..19, full 25 columns
+            ".....################....",
+            ".....#++#+++#+++#+++#....",
+            ".....#++#+++#+++#+++#....",
+            ".....#++#+++#+++#+++#....",
+            ".....#++#+++#+++#+++#....",
+            ".....#+++++++++++++#.....",
+            ".....#++++++++++#++#.....",
+            ".....#+++++++++#+++#.....",
+            ".....##########++++#.....",
+            ".....#+++++++++++++#.....",
+            ".....#+++++++++++++#.....",
+            "......#+++++++++++#......",
+            ".......###########.......",
         };
-        static final String[] PAPER = {
-            "..#.#.#.#..", "..#.#.#.#..", "..#.#.#.#..", "..#.#.#.#.#", "..#######.#",
-            ".#########.", ".#########.", ".#########.", "..#######..", "...#####...",
-            "...#####...",
+        static final int ROCK_TOP = 7;
+        static final String[] PAPER = { // rows 3..20, full 25 columns
+            ".............##..........",
+            "..........##.##..........",
+            "..........##.##.##.......",
+            ".......##.##.##.##.......",
+            ".......##.##.##.##.......",
+            ".......##.##.##.##.......",
+            "...##..##.##.##.##.......",
+            "....##.##.##.##.##.......",
+            ".....####.##.##.##.......",
+            "......#############......",
+            ".......##++++++++#.......",
+            "......#+++++++++++#......",
+            "......#+++++++++++#......",
+            "......#+++++++++++#......",
+            "......#+++++++++++#......",
+            "......#+++++++++++#......",
+            ".......#+++++++++#.......",
+            "........#########........",
         };
-        static final String[] SCISSORS = {
-            "#.......#", ".#.....#.", "..#...#..", "...#.#...", "....#....", "...###...",
-            "..#####..", ".#######.", ".#######.", "..#####..",
+        static final int PAPER_TOP = 3;
+        static final String[] SCISSORS = { // rows 3..20, full 25 columns
+            "......#...........#......",
+            ".....#+#.........#+#.....",
+            ".....#+#.........#+#.....",
+            "......#+#.......#+#......",
+            "......#+#.......#+#......",
+            ".......#+#.....#+#.......",
+            ".......#+#.....#+#.......",
+            ".......#+#..#..#+#.......",
+            "........#+#.#.#+#........",
+            "........#+#.#.#+#........",
+            ".........#+###+#.........",
+            ".........#++++++#........",
+            "........#++++++++#.......",
+            "........#######++#.......",
+            "........#++++++++#.......",
+            "........#++++++++#.......",
+            ".........#++++++#........",
+            "..........######.........",
         };
-        static final long COUNTDOWN_MS = 1500, SHOW_MS = 5000;
+        static final int SCISSORS_TOP = 3;
+        static final String[][] HANDS = {ROCK, PAPER, SCISSORS};
+        static final int[] TOPS = {ROCK_TOP, PAPER_TOP, SCISSORS_TOP};
+        static final long BOB_MS = 330, SHAKE_MS = BOB_MS * 3, REVEAL_MS = 260, SHOW_MS = 4000;
+        static final long IDLE_MS = 900;
+        static final int FILL = ON * 2 / 7;
         private final Random random;
         private final Shake shake = new Shake();
         private int shakes;
@@ -251,7 +304,7 @@ public final class Toys {
 
         public RockPaperScissors() { this(new Random()); }
 
-        RockPaperScissors(Random random) { this.random = random; }
+        public RockPaperScissors(Random random) { this.random = random; }
 
         @Override public String id() { return "rps"; }
 
@@ -263,29 +316,56 @@ public final class Toys {
             shakes = 0;
         }
 
+        public int pick() { return pick; }
+
+        /** Stamps hand {@code i} shifted by dy, at {@code scale} of full brightness. */
+        public static void hand(Frame f, int i, int dy, double scale) {
+            String[] rows = HANDS[i];
+            for (int r = 0; r < rows.length; r++) {
+                for (int x = 0; x < rows[r].length(); x++) {
+                    char c = rows[r].charAt(x);
+                    if (c == '.') continue;
+                    f.max(x, TOPS[i] + r + dy, (int) ((c == '#' ? ON : FILL) * scale));
+                }
+            }
+        }
+
         @Override public void render(Frame f, long now, Toy.Context ctx) {
             if (shake.feed(ctx, now) && !active(now) && ++shakes >= 3) play(now);
-            if (start == Long.MIN_VALUE || now - start >= COUNTDOWN_MS + SHOW_MS) {
-                Font.textCentred(f, "RPS", 10, ON);
-                return;
-            }
-            long t = now - start;
-            if (t < COUNTDOWN_MS) {
-                // The fist bounces three times, like the hand before the reveal.
-                double bounce = Math.abs(Math.sin(Math.PI * t / 500.0));
-                Frame fist = new Frame();
-                bitmap(fist, ROCK, ON * 2 / 3);
-                int dy = (int) Math.round(-4 * bounce);
-                for (int y = 0; y < 25; y++)
-                    for (int x = 0; x < 25; x++)
-                        if (fist.get(x, y) > 0) f.max(x, y + dy, fist.get(x, y));
+            long t = start == Long.MIN_VALUE ? Long.MAX_VALUE : now - start;
+            if (t < SHAKE_MS) {
+                long k = t / BOB_MS;
+                double u = (t % BOB_MS) / (double) BOB_MS;
+                hand(f, 0, (int) Math.round(-3 * Math.sin(Math.PI * u)) - 1, 1);
+                for (int i = 0; i < 3; i++) f.set(10 + i * 2, 22, i <= k ? ON : FILL);
+            } else if (t < SHAKE_MS + REVEAL_MS + SHOW_MS) {
+                long rt = t - SHAKE_MS;
+                if (rt < REVEAL_MS) {
+                    // A ring closes in from the rim; the hand is there behind it.
+                    double r = 12.5 * (1 - rt / (double) REVEAL_MS);
+                    Frame h = new Frame();
+                    hand(h, pick, 0, 1);
+                    for (int y = 0; y < 25; y++) {
+                        for (int x = 0; x < 25; x++) {
+                            double d = Math.hypot(x - C, y - C);
+                            if (Math.abs(d - r) < 1.0) f.max(x, y, ON);
+                            else if (d > r) f.max(x, y, h.get(x, y));
+                        }
+                    }
+                } else {
+                    hand(f, pick, 0, 0.82 + 0.18 * Math.cos((rt - REVEAL_MS) / 1000.0 * Math.PI * 1.6));
+                }
             } else {
-                bitmap(f, pick == 0 ? ROCK : pick == 1 ? PAPER : SCISSORS, ON);
+                // Idle: the hands take turns, fading out at the end of each turn.
+                long phase = Math.floorMod(now, IDLE_MS * 3);
+                int i = (int) (phase / IDLE_MS);
+                double u = (phase % IDLE_MS) / (double) IDLE_MS;
+                hand(f, i, 0, u < 0.8 ? 1 : 1 - (u - 0.8) / 0.2 * 0.7);
             }
         }
 
         boolean active(long now) {
-            return start != Long.MIN_VALUE && now - start < COUNTDOWN_MS + SHOW_MS;
+            return start != Long.MIN_VALUE && now - start < SHAKE_MS + REVEAL_MS + SHOW_MS;
         }
 
         @Override public int sensors() { return SENSOR_GRAVITY; }
