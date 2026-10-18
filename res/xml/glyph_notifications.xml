@@ -9,31 +9,6 @@
         android:persistent="false" />
 
     <PreferenceCategory
-        android:key="patterns"
-        android:title="@string/settings_patterns_category">
-
-        <ListPreference
-            android:key="open_glyph_pattern"
-            android:title="@string/settings_default_pattern"
-            android:entries="@array/default_pattern_entries"
-            android:entryValues="@array/default_pattern_values"
-            android:defaultValue="GENERATIVE"
-            app:useSimpleSummaryProvider="true"
-            android:persistent="false" />
-
-        <Preference
-            android:key="app_patterns"
-            android:title="@string/settings_patterns"
-            android:summary="@string/settings_patterns_summary" />
-
-        <Preference
-            android:key="test"
-            android:title="@string/settings_test"
-            android:summary="@string/settings_test_summary"
-            android:icon="@drawable/ic_og_play" />
-    </PreferenceCategory>
-
-    <PreferenceCategory
         android:key="generative"
         android:title="@string/settings_generative_category">
 

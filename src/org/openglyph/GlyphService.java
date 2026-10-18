@@ -29,7 +29,6 @@ import org.openglyph.core.MatrixLayout;
 import org.openglyph.core.Renderer;
 import org.openglyph.core.SysfsMatrixSink;
 import org.openglyph.effects.Effects;
-import org.openglyph.core.AppPatterns;
 import org.openglyph.core.EssentialRule;
 import org.openglyph.core.GlyphIcons;
 import org.openglyph.core.Frame;
@@ -80,7 +79,6 @@ public final class GlyphService extends Service {
     private final Map<String, IBinder> mPackageTokens = new HashMap<>();
     private final IdleLayer mIdle = new IdleLayer(this::toyContext);
     private IdleController mIdleController;
-    private volatile Map<String, String> mAppPatterns = new HashMap<>();
     private volatile List<EssentialRule> mEssentialRules = new ArrayList<>();
     private volatile boolean mBedtime;
     /** Package and rule of the Essential Notification on the matrix, to skip redundant redraws. */
@@ -172,14 +170,7 @@ public final class GlyphService extends Service {
     /** Called by the notification listener for each alert-worthy notification. */
     void onNotification(String pkg) {
         if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.NOTIFICATIONS)) return;
-        Effects.Pattern fallback = Effects.Pattern.parse(GlyphSettings.string(getContentResolver(),
-                GlyphSettings.DEFAULT_PATTERN, "GENERATIVE"), Effects.Pattern.GENERATIVE);
-        Effects.Pattern pattern = Effects.Pattern.parse(mAppPatterns.get(pkg), fallback);
-        if (pattern == Effects.Pattern.GENERATIVE) {
-            mPulse.trigger(SystemClock.uptimeMillis(), mSounds.theme(pkg));
-        } else {
-            mPulse.trigger(SystemClock.uptimeMillis(), pattern);
-        }
+        mPulse.trigger(SystemClock.uptimeMillis(), mSounds.theme(pkg));
         mRenderer.invalidate();
         if (GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS)) {
             mBackground.execute(() -> mSounds.apply(pkg));
@@ -235,8 +226,6 @@ public final class GlyphService extends Service {
         order.add(GlyphSettings.OFF);
         mToys.setOrder(order);
         if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS)) mToys.deselect();
-        mAppPatterns = AppPatterns.parse(
-                GlyphSettings.string(getContentResolver(), GlyphSettings.APP_PATTERNS, ""));
         mEssentialRules = GlyphSettings.essentialRules(getContentResolver());
         mEssentialShown = "\u0000"; // icons may have changed: redraw
         GlyphNotificationListener.refreshEssential();
@@ -250,6 +239,7 @@ public final class GlyphService extends Service {
             mBackground.execute(() -> {
                 mSounds.revertAll();
                 for (AppList.App app : AppList.launchable(this)) mSounds.apply(app.pkg);
+                mSounds.markCurrent();
             });
         }
         mEngine = engine;
@@ -258,7 +248,10 @@ public final class GlyphService extends Service {
             mGenSoundsOn = genSounds;
             if (genSounds) {
                 mBackground.execute(() -> {
+                    // Sounds made by an older generator are replaced by the current one.
+                    if (mSounds.outdated()) mSounds.revertAll();
                     for (AppList.App app : AppList.launchable(this)) mSounds.apply(app.pkg);
+                    mSounds.markCurrent();
                 });
             } else if (!first) {
                 mBackground.execute(mSounds::revertAll);

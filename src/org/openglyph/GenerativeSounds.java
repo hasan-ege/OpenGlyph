@@ -42,6 +42,8 @@ final class GenerativeSounds {
     private static final String TAG = "OpenGlyphSounds";
     static final int SAMPLE_RATE = Generative.SR;
     private static final String PREFS = "generative_sounds";
+    /** Bump when the generator changes, so the sounds already set are made again. */
+    static final int VERSION = 2;
     private static final String FOLDER = Environment.DIRECTORY_NOTIFICATIONS + "/OpenGlyph/";
 
     private final Context mContext;
@@ -193,19 +195,27 @@ final class GenerativeSounds {
 
     /** Puts the default sound back wherever we set ours. Background thread only. */
     synchronized void revertAll() {
+        // Every sound we ever made (any seed, engine or generator version): a channel playing
+        // one of them was set by us, so it goes back to the default sound.
+        Set<String> ours = new HashSet<>();
+        for (Map.Entry<String, ?> entry : mPrefs.getAll().entrySet()) {
+            if ((entry.getKey().startsWith("uri:") || entry.getKey().startsWith("applied:"))
+                    && entry.getValue() instanceof String v) {
+                ours.add(v);
+            }
+        }
         for (String key : mPrefs.getAll().keySet()) {
             if (!key.startsWith("channels:")) continue;
             String pkg = key.substring("channels:".length());
             try {
                 ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(pkg, 0);
-                String ours = mPrefs.getString("applied:" + pkg, "");
                 Set<String> ids = mPrefs.getStringSet(key, Set.of());
                 @SuppressWarnings("unchecked")
                 List<NotificationChannel> channels =
                         nm().getNotificationChannelsForPackage(pkg, ai.uid, false).getList();
                 for (NotificationChannel ch : channels) {
                     if (!ids.contains(ch.getId()) || ch.getSound() == null
-                            || !ch.getSound().toString().equals(ours)) continue;
+                            || !ours.contains(ch.getSound().toString())) continue;
                     ch.setSound(Settings.System.DEFAULT_NOTIFICATION_URI, ch.getAudioAttributes());
                     nm().updateNotificationChannelForPackage(pkg, ai.uid, ch);
                 }
@@ -226,6 +236,15 @@ final class GenerativeSounds {
         }
         e.apply();
         mThemes.clear();
+    }
+
+    /** True when the sounds set on channels came from an older generator. */
+    boolean outdated() {
+        return mPrefs.getInt("version", 1) != VERSION;
+    }
+
+    void markCurrent() {
+        mPrefs.edit().putInt("version", VERSION).apply();
     }
 
     /** A new channel may have appeared: look at the app again next time. */

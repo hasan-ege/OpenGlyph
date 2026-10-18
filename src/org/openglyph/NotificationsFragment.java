@@ -24,18 +24,9 @@ public final class NotificationsFragment extends GlyphFragment {
         main.setChecked(GlyphSettings.flag(cr, GlyphSettings.NOTIFICATIONS));
         main.addOnSwitchChangeListener((b, on) -> {
             GlyphSettings.setFlag(cr, GlyphSettings.NOTIFICATIONS, on);
-            findPreference("patterns").setEnabled(on);
+            findPreference("generative").setEnabled(on);
         });
-        findPreference("patterns").setEnabled(main.isChecked());
-
-        ListPreference pattern = findPreference(GlyphSettings.DEFAULT_PATTERN);
-        pattern.setValue(GlyphSettings.string(cr, GlyphSettings.DEFAULT_PATTERN, "GENERATIVE"));
-        pattern.setOnPreferenceChangeListener((p, value) -> {
-            Settings.Secure.putString(cr, GlyphSettings.DEFAULT_PATTERN, (String) value);
-            return true;
-        });
-
-        link("app_patterns", AppPatternsFragment::new);
+        findPreference("generative").setEnabled(main.isChecked());
 
         ListPreference engine = findPreference(GlyphSettings.ENGINE);
         engine.setValue(GlyphSettings.string(cr, GlyphSettings.ENGINE, "DIODE"));
@@ -72,11 +63,6 @@ public final class NotificationsFragment extends GlyphFragment {
             GlyphService running = GlyphService.get();
             if (running != null) running.previewGenerative((String) value);
             return false; // a one-shot action, nothing to keep selected
-        });
-        findPreference("test").setOnPreferenceClickListener(p -> {
-            GlyphService running = GlyphService.get();
-            if (running != null) running.testPulse();
-            return true;
         });
     }
 

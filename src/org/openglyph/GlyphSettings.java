@@ -35,8 +35,6 @@ final class GlyphSettings {
     /** Old essential-apps setting ("pkg,pkg"); read once to seed the first rule. */
     static final String ESSENTIAL_APPS = "open_glyph_essential_apps";
     static final String ESSENTIAL_RULES = "open_glyph_essential_rules"; // EssentialRule.format
-    static final String DEFAULT_PATTERN = "open_glyph_pattern";      // GENERATIVE|RING|SWEEP|DOT|FLASH
-    static final String APP_PATTERNS = "open_glyph_app_patterns";    // "pkg=RING;pkg=SWEEP"
     static final String AOD_TOY = "open_glyph_aod_toy";              // "" = clock, else SDK toy id
     /** Active toy ids in Glyph Button order, "a,b,c" ("off" is implied last). v2: stock set. */
     static final String TOY_ORDER = "open_glyph_toy_order_v2";
@@ -48,7 +46,7 @@ final class GlyphSettings {
     static final String[] ALL = {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
-        APP_PATTERNS, DEFAULT_PATTERN, AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, ENGINE, SEED,
+        AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, ENGINE, SEED,
     };
 
     private GlyphSettings() {}
