@@ -178,10 +178,17 @@ final class NothingToyBridge implements RemoteToy.Listener {
         return v != null && ("1".equals(v.toString()) || "true".equalsIgnoreCase(v.toString()));
     }
 
+    private int mBindSerial;
+
     private Connection bind(RemoteToy toy) {
         Connection c = new Connection(toy);
+        // A fresh identifier per bind: Android then calls the toy's onBind() every time instead
+        // of handing back the binder from the last bind. Toys tear their Glyph session down in
+        // onUnbind(), so a service that stayed alive (e.g. an always-on toy running in the
+        // foreground) would otherwise never draw again.
         Intent intent = new Intent(ACTION_TOY)
-                .setComponent(new ComponentName(toy.packageName(), toy.className()));
+                .setComponent(new ComponentName(toy.packageName(), toy.className()))
+                .setIdentifier("openglyph-" + (++mBindSerial));
         // As the stock host does: the toy runs at foreground priority while bound (so it is not
         // frozen mid-animation) and may start its own foreground service (always-on toys do).
         int flags = Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE

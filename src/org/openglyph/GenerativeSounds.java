@@ -118,9 +118,14 @@ final class GenerativeSounds {
         }
     }
 
-    /** The app's sound in MediaStore, written on first use. */
+    /** Generator version + seed + engine: sounds made under another stamp are out of date. */
+    private String stamp() {
+        return VERSION + ":" + deviceSeed(mContext.getContentResolver()) + ":" + engine();
+    }
+
+    /** The app's sound in MediaStore for the current stamp, written on first use. */
     synchronized Uri soundUri(String pkg) {
-        String key = "uri:" + deviceSeed(mContext.getContentResolver()) + ":" + engine() + ":" + pkg;
+        String key = "uri:" + stamp() + ":" + pkg;
         String saved = mPrefs.getString(key, null);
         if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
         String name = "OpenGlyph " + label(pkg).replaceAll("[\\\\/:*?\"<>|]", "_") + " ("
@@ -157,6 +162,25 @@ final class GenerativeSounds {
         }
     }
 
+    /**
+     * Every sound file in our folder (any seed, engine or generator version), as content URIs.
+     * A channel playing one of them was set by us, whatever our own records say.
+     */
+    private Set<String> ourFiles() {
+        Set<String> out = new HashSet<>();
+        Uri base = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+        try (Cursor c = mContext.getContentResolver().query(base,
+                new String[] {MediaStore.Audio.Media._ID},
+                MediaStore.Audio.Media.RELATIVE_PATH + "=?", new String[] {FOLDER}, null)) {
+            while (c != null && c.moveToNext()) {
+                out.add(android.content.ContentUris.withAppendedId(base, c.getLong(0)).toString());
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "listing our sounds failed", e);
+        }
+        return out;
+    }
+
     private static INotificationManager nm() {
         return INotificationManager.Stub.asInterface(ServiceManager.getService(Context.NOTIFICATION_SERVICE));
     }
@@ -166,89 +190,100 @@ final class GenerativeSounds {
                 || sound.toString().startsWith(Settings.System.DEFAULT_NOTIFICATION_URI.toString()));
     }
 
-    /** Gives an app's default-sound channels its generative sound. Background thread only. */
+    private boolean unlocked() {
+        return mContext.getSystemService(android.os.UserManager.class).isUserUnlocked();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<NotificationChannel> channels(String pkg, int uid) throws Exception {
+        return nm().getNotificationChannelsForPackage(pkg, uid, false).getList();
+    }
+
+    /**
+     * Gives the app's channels its current generative sound: channels on the default sound,
+     * and channels still playing an older sound of ours. Sounds the user picked are left alone.
+     * Background thread only; does nothing until the phone is unlocked (no storage before).
+     */
     synchronized void apply(String pkg) {
-        if (mPrefs.getBoolean("done:" + pkg, false)) return;
+        apply(pkg, null);
+    }
+
+    private void apply(String pkg, Set<String> ours) {
+        if (!unlocked()) return;
         try {
             ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(pkg, 0);
-            @SuppressWarnings("unchecked")
-            List<NotificationChannel> channels =
-                    nm().getNotificationChannelsForPackage(pkg, ai.uid, false).getList();
-            Set<String> changed = new HashSet<>(mPrefs.getStringSet("channels:" + pkg, Set.of()));
-            Uri ours = null;
-            for (NotificationChannel ch : channels) {
-                if (!isDefaultSound(ch.getSound())) continue;
-                if (ours == null) ours = soundUri(pkg);
-                if (ours == null) return;
-                ch.setSound(ours, ch.getAudioAttributes());
+            Uri current = null;
+            int changed = 0;
+            for (NotificationChannel ch : channels(pkg, ai.uid)) {
+                Uri sound = ch.getSound();
+                boolean ourOld = sound != null && !isDefaultSound(sound);
+                if (ourOld) {
+                    if (ours == null) ours = ourFiles();
+                    ourOld = ours.contains(sound.toString());
+                }
+                if (!isDefaultSound(sound) && !ourOld) continue;
+                if (current == null) current = soundUri(pkg);
+                if (current == null) return;
+                if (current.equals(sound)) continue;
+                ch.setSound(current, ch.getAudioAttributes());
                 nm().updateNotificationChannelForPackage(pkg, ai.uid, ch);
-                changed.add(ch.getId());
+                changed++;
             }
-            if (ours != null) mPrefs.edit().putString("applied:" + pkg, ours.toString()).apply();
-            mPrefs.edit().putStringSet("channels:" + pkg, changed)
-                    .putBoolean("done:" + pkg, !channels.isEmpty()).apply();
-            if (ours != null) Log.i(TAG, "generative sound for " + pkg + " on " + changed.size() + " channels");
+            if (changed > 0) Log.i(TAG, "generative sound for " + pkg + " on " + changed + " channels");
         } catch (Exception e) {
             Log.w(TAG, "apply " + pkg + " failed", e);
         }
     }
 
-    /** Puts the default sound back wherever we set ours. Background thread only. */
-    synchronized void revertAll() {
-        // Every sound we ever made (any seed, engine or generator version): a channel playing
-        // one of them was set by us, so it goes back to the default sound.
-        Set<String> ours = new HashSet<>();
-        for (Map.Entry<String, ?> entry : mPrefs.getAll().entrySet()) {
-            if ((entry.getKey().startsWith("uri:") || entry.getKey().startsWith("applied:"))
-                    && entry.getValue() instanceof String v) {
-                ours.add(v);
-            }
-        }
-        for (String key : mPrefs.getAll().keySet()) {
-            if (!key.startsWith("channels:")) continue;
-            String pkg = key.substring("channels:".length());
-            try {
-                ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(pkg, 0);
-                Set<String> ids = mPrefs.getStringSet(key, Set.of());
-                @SuppressWarnings("unchecked")
-                List<NotificationChannel> channels =
-                        nm().getNotificationChannelsForPackage(pkg, ai.uid, false).getList();
-                for (NotificationChannel ch : channels) {
-                    if (!ids.contains(ch.getId()) || ch.getSound() == null
-                            || !ours.contains(ch.getSound().toString())) continue;
-                    ch.setSound(Settings.System.DEFAULT_NOTIFICATION_URI, ch.getAudioAttributes());
-                    nm().updateNotificationChannelForPackage(pkg, ai.uid, ch);
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "revert " + pkg + " failed", e);
-            }
-            mPrefs.edit().remove(key).remove("done:" + pkg).remove("applied:" + pkg).apply();
-        }
-        // Drop the generated files too; they are made again on demand.
+    /** Every launchable app gets its current sound; files no channel needs any more go. */
+    synchronized void syncAll() {
+        if (!unlocked()) return;
+        Set<String> ours = ourFiles();
+        for (AppList.App app : AppList.launchable(mContext)) apply(app.pkg, ours);
+        // Keep only this stamp's files.
+        String prefix = "uri:" + stamp() + ":";
+        Set<String> keep = new HashSet<>();
         SharedPreferences.Editor e = mPrefs.edit();
         for (Map.Entry<String, ?> entry : mPrefs.getAll().entrySet()) {
             if (!entry.getKey().startsWith("uri:")) continue;
-            try {
-                mContext.getContentResolver().delete(Uri.parse((String) entry.getValue()), null, null);
-            } catch (Exception ignored) {
-            }
-            e.remove(entry.getKey());
+            if (entry.getKey().startsWith(prefix)) keep.add((String) entry.getValue());
+            else e.remove(entry.getKey());
         }
         e.apply();
+        for (String uri : ourFiles()) {
+            if (keep.contains(uri)) continue;
+            try {
+                mContext.getContentResolver().delete(Uri.parse(uri), null, null);
+            } catch (Exception ignored) {
+            }
+        }
+        Log.i(TAG, "generative sounds in sync (" + keep.size() + " sounds)");
+    }
+
+    /** Puts the default sound back on every channel playing one of our sounds; deletes them. */
+    synchronized void revertAll() {
+        if (!unlocked()) return;
+        Set<String> ours = ourFiles();
+        for (AppList.App app : AppList.launchable(mContext)) {
+            try {
+                ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(app.pkg, 0);
+                for (NotificationChannel ch : channels(app.pkg, ai.uid)) {
+                    if (ch.getSound() == null || !ours.contains(ch.getSound().toString())) continue;
+                    ch.setSound(Settings.System.DEFAULT_NOTIFICATION_URI, ch.getAudioAttributes());
+                    nm().updateNotificationChannelForPackage(app.pkg, ai.uid, ch);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "revert " + app.pkg + " failed", e);
+            }
+        }
+        for (String uri : ours) {
+            try {
+                mContext.getContentResolver().delete(Uri.parse(uri), null, null);
+            } catch (Exception ignored) {
+            }
+        }
+        mPrefs.edit().clear().apply();
         mThemes.clear();
-    }
-
-    /** True when the sounds set on channels came from an older generator. */
-    boolean outdated() {
-        return mPrefs.getInt("version", 1) != VERSION;
-    }
-
-    void markCurrent() {
-        mPrefs.edit().putInt("version", VERSION).apply();
-    }
-
-    /** A new channel may have appeared: look at the app again next time. */
-    void forget(String pkg) {
-        mPrefs.edit().remove("done:" + pkg).apply();
+        Log.i(TAG, "generative sounds removed");
     }
 }

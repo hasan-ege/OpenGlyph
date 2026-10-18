@@ -73,6 +73,7 @@ public final class GlyphService extends Service {
     private final java.util.concurrent.ExecutorService mBackground =
             java.util.concurrent.Executors.newSingleThreadExecutor();
     private Boolean mGenSoundsOn;
+    private ChannelWatcher mChannelWatcher;
     private String mEngine;
     private NothingToyBridge mToyBridge;
     /** App frames from Nothing SDK apps (OpenGlyphCompat), keyed by package. */
@@ -120,6 +121,15 @@ public final class GlyphService extends Service {
         mIdleController.update();
 
         registerReceiver(mPowerReceiver, new IntentFilter(Intent.ACTION_POWER_CONNECTED));
+        // A new channel gets its generative sound at once, before the app's first notification.
+        mChannelWatcher = new ChannelWatcher(pkg -> {
+            if (GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS)) {
+                mBackground.execute(() -> mSounds.apply(pkg));
+            }
+        });
+        mChannelWatcher.register(this);
+        // Notification sounds live in shared storage, which opens when the user unlocks.
+        registerReceiver(mUnlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
         // Sent by the device KeyHandler in system_server; same uid, so PERMISSION holds for it.
         registerReceiver(mButtonReceiver, new IntentFilter(ACTION_GLYPH_BUTTON), PERMISSION,
                 mHandler, Context.RECEIVER_EXPORTED);
@@ -144,6 +154,8 @@ public final class GlyphService extends Service {
         sInstance = null;
         if (mTelephony != null) mTelephony.unregisterTelephonyCallback(mCallState);
         unregisterReceiver(mPowerReceiver);
+        unregisterReceiver(mUnlockReceiver);
+        mChannelWatcher.unregister();
         unregisterReceiver(mButtonReceiver);
         getContentResolver().unregisterContentObserver(mSettingsObserver);
         mRecordLed.stop();
@@ -236,23 +248,14 @@ public final class GlyphService extends Service {
                 + "|" + GlyphSettings.string(getContentResolver(), GlyphSettings.SEED, "");
         if (mSounds != null && mEngine != null && !mEngine.equals(engine) && genSounds) {
             // Another engine or seed: every app's sound changes; swap the ones we set.
-            mBackground.execute(() -> {
-                mSounds.revertAll();
-                for (AppList.App app : AppList.launchable(this)) mSounds.apply(app.pkg);
-                mSounds.markCurrent();
-            });
+            mBackground.execute(mSounds::syncAll);
         }
         mEngine = engine;
         if (mSounds != null && (mGenSoundsOn == null || mGenSoundsOn != genSounds)) {
             boolean first = mGenSoundsOn == null;
             mGenSoundsOn = genSounds;
             if (genSounds) {
-                mBackground.execute(() -> {
-                    // Sounds made by an older generator are replaced by the current one.
-                    if (mSounds.outdated()) mSounds.revertAll();
-                    for (AppList.App app : AppList.launchable(this)) mSounds.apply(app.pkg);
-                    mSounds.markCurrent();
-                });
+                mBackground.execute(mSounds::syncAll); // no-op until unlocked; see mUnlockReceiver
             } else if (!first) {
                 mBackground.execute(mSounds::revertAll);
             }
@@ -392,6 +395,15 @@ public final class GlyphService extends Service {
         @Override
         public void onChange(boolean selfChange) {
             applySettings();
+        }
+    };
+
+    private final BroadcastReceiver mUnlockReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS)) {
+                mBackground.execute(mSounds::syncAll);
+            }
         }
     };
 
