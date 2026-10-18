@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenGlyph test toy</string>
+    <string name="toy_name">Test toy</string>
+    <string name="toy_summary">Counts Glyph Button events</string>
+</resources>

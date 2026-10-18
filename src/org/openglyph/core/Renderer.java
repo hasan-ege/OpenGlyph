@@ -24,6 +24,8 @@ public final class Renderer {
     private final int[] leds = new int[MatrixLayout.LED_COUNT];
     private final int[] lastLeds = new int[MatrixLayout.LED_COUNT];
 
+    /** Last frame sent to the hardware (before brightness scaling), for the Settings preview. */
+    private final int[] shown = new int[MatrixLayout.GRID_SIZE];
     private int brightness = 255; // user setting, 0..255
     private boolean lit;
     private boolean dirty = true;
@@ -80,12 +82,18 @@ public final class Renderer {
                 sink.off();
                 lit = false;
                 java.util.Arrays.fill(lastLeds, 0);
+                synchronized (shown) {
+                    java.util.Arrays.fill(shown, 0);
+                }
             }
             return -1;
         }
 
         frame.clear();
         long next = effect.render(frame, now);
+        synchronized (shown) {
+            System.arraycopy(frame.px, 0, shown, 0, shown.length);
+        }
         MatrixLayout.gridToLeds(frame.px, leds);
         for (int i = 0; i < leds.length; i++) {
             leds[i] = (int) ((long) leds[i] * SysfsMatrixSink.HW_MAX * brightness / (Frame.MAX * 255L));
@@ -97,6 +105,13 @@ public final class Renderer {
         }
         // An effect that expires must be noticed even if it asked for a static frame.
         return next < 0 ? 250 : Math.max(next, MIN_FRAME_MS);
+    }
+
+    /** Copies what the matrix shows now (625 grid, 0..Frame.MAX) into {@code out}. */
+    public void snapshot(int[] out) {
+        synchronized (shown) {
+            System.arraycopy(shown, 0, out, 0, shown.length);
+        }
     }
 
     public synchronized void start() {

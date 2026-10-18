@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="day_letters">
+        <item>P</item><item>S</item><item>Ç</item><item>P</item><item>C</item><item>C</item><item>P</item>
+    </string-array>
+    <string-array name="day_short_names">
+        <item>Pzt</item><item>Sal</item><item>Çar</item><item>Per</item><item>Cum</item><item>Cmt</item><item>Paz</item>
+    </string-array>
+</resources>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <com.android.settingslib.widget.MainSwitchPreference
+        android:key="open_glyph_notifications"
+        android:title="@string/settings_notifications_main"
+        android:persistent="false" />
+
+    <PreferenceCategory
+        android:key="patterns"
+        android:title="@string/settings_patterns_category">
+
+        <ListPreference
+            android:key="open_glyph_pattern"
+            android:title="@string/settings_default_pattern"
+            android:entries="@array/default_pattern_entries"
+            android:entryValues="@array/default_pattern_values"
+            android:defaultValue="RING"
+            app:useSimpleSummaryProvider="true"
+            android:persistent="false" />
+
+        <Preference
+            android:key="app_patterns"
+            android:title="@string/settings_patterns"
+            android:summary="@string/settings_patterns_summary" />
+
+        <Preference
+            android:key="test"
+            android:title="@string/settings_test"
+            android:summary="@string/settings_test_summary"
+            android:icon="@drawable/ic_og_play" />
+    </PreferenceCategory>
+
+    <com.android.settingslib.widget.FooterPreference
+        android:key="footer"
+        android:title="@string/settings_notifications_footer" />
+</PreferenceScreen>

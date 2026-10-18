@@ -145,7 +145,18 @@ public final class GlyphService extends Service {
             forward(colors, false); // toys
         }
 
-        @Override public void setGlyphMatrixTimeout(boolean enable) {}
+        @Override public void setGlyphMatrixTimeout(boolean enable) {
+            String pkg = callingPackage();
+            IOpenGlyph og = mOpenGlyph;
+            if (pkg == null || og == null) return;
+            final long id = Binder.clearCallingIdentity();
+            try {
+                og.setPackageTimeout(pkg, enable);
+            } catch (RemoteException ignored) {
+            } finally {
+                Binder.restoreCallingIdentity(id);
+            }
+        }
 
         @Override public void setAppMatrixColors(int[] colors) {
             forward(colors, true); // apps

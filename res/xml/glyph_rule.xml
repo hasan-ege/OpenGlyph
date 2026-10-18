@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Essential Notifications > Create a new rule, after the stock screen. -->
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:key="name_category"
+        android:title="@string/rule_name">
+
+        <EditTextPreference
+            android:key="rule_name"
+            android:title="@string/rule_name"
+            android:icon="@drawable/ic_og_edit"
+            android:persistent="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="from_category"
+        android:title="@string/rule_from">
+
+        <Preference
+            android:key="rule_apps"
+            android:title="@string/rule_apps"
+            android:icon="@drawable/ic_og_apps" />
+
+        <Preference
+            android:key="rule_people"
+            android:title="@string/rule_people"
+            android:icon="@drawable/ic_og_person" />
+
+        <EditTextPreference
+            android:key="rule_keywords"
+            android:title="@string/rule_keywords"
+            android:dialogMessage="@string/rule_keywords_hint"
+            android:icon="@drawable/ic_og_keyword"
+            android:persistent="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="display_category"
+        android:title="@string/rule_display">
+
+        <Preference
+            android:key="rule_icon"
+            android:title="@string/rule_icon" />
+
+        <Preference
+            android:key="rule_preview"
+            android:title="@string/rule_preview"
+            android:summary="@string/rule_preview_summary"
+            android:icon="@drawable/ic_og_play" />
+    </PreferenceCategory>
+
+    <com.android.settingslib.widget.ButtonPreference
+        android:key="rule_save"
+        android:title="@string/rule_save"
+        app:buttonPreferenceType="filled"
+        app:buttonPreferenceSize="large" />
+
+    <com.android.settingslib.widget.ButtonPreference
+        android:key="rule_delete"
+        android:title="@string/rule_delete"
+        app:buttonPreferenceType="outline" />
+</PreferenceScreen>

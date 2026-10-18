@@ -1,17 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Glyph Interface: laid out after the stock screen, as tiles (TilePreference). -->
 <PreferenceScreen
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:title="@string/app_name">
 
-    <com.android.settingslib.widget.TopIntroPreference
-        android:key="intro"
-        android:title="@string/settings_intro" />
-
     <com.android.settingslib.widget.MainSwitchPreference
         android:key="open_glyph_enabled"
         android:title="@string/settings_main_switch"
         android:persistent="false" />
+
+    <org.openglyph.HeroPreference android:key="hero" />
 
     <SeekBarPreference
         android:key="open_glyph_brightness"
@@ -24,111 +23,86 @@
         android:persistent="false" />
 
     <PreferenceCategory
-        android:key="effects"
-        android:title="@string/settings_effects">
+        android:key="toys_category"
+        android:title="@string/settings_toys">
 
-        <SwitchPreferenceCompat
+        <org.openglyph.TilePreference
+            android:key="open_glyph_toys"
+            android:title="@string/settings_toys_tile"
+            android:summary="@string/settings_toys_tile_summary"
+            app:tileSwitch="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="notifications_category"
+        android:title="@string/settings_notifications_category">
+
+        <org.openglyph.TilePreference
             android:key="open_glyph_notifications"
             android:title="@string/settings_notifications"
-            android:summary="@string/settings_notifications_summary"
-            android:persistent="false" />
+            android:icon="@drawable/ic_og_notifications"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
 
-        <SwitchPreferenceCompat
+        <org.openglyph.TilePreference
+            android:key="essential"
+            android:title="@string/settings_essential"
+            android:icon="@drawable/ic_og_essential"
+            app:tileHalf="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="features_category"
+        android:title="@string/settings_features">
+
+        <org.openglyph.TilePreference
+            android:key="open_glyph_flip"
+            android:title="@string/settings_flip"
+            android:summary="@string/settings_flip_short"
+            android:icon="@drawable/ic_og_flip"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
+            android:key="open_glyph_aod"
+            android:title="@string/settings_aod_toy_tile"
+            android:icon="@drawable/ic_glyph"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
             android:key="open_glyph_calls"
             android:title="@string/settings_calls"
-            android:summary="@string/settings_calls_summary"
-            android:persistent="false" />
+            android:summary="@string/settings_calls_short"
+            android:icon="@drawable/ic_og_call"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
 
-        <SwitchPreferenceCompat
+        <org.openglyph.TilePreference
             android:key="open_glyph_charging"
             android:title="@string/settings_charging"
-            android:summary="@string/settings_charging_summary"
-            android:persistent="false" />
+            android:summary="@string/settings_charging_short"
+            android:icon="@drawable/ic_og_charging"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
 
-        <SwitchPreferenceCompat
+        <org.openglyph.TilePreference
             android:key="open_glyph_record_led"
             android:title="@string/settings_record_led"
             android:summary="@string/settings_record_led_summary"
-            android:persistent="false" />
-
-        <Preference
-            android:key="test"
-            android:title="@string/settings_test"
-            android:summary="@string/settings_test_summary" />
+            android:icon="@drawable/ic_og_record"
+            app:tileSwitch="true" />
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:key="nothing_style"
-        android:title="@string/settings_always_on_category">
+        android:key="auto_off_category"
+        android:title="@string/settings_auto_off">
 
-        <ListPreference
-            android:key="open_glyph_aod"
-            android:title="@string/settings_aod"
-            android:entries="@array/aod_entries"
-            android:entryValues="@array/aod_values"
-            android:defaultValue="OFF"
-            app:useSimpleSummaryProvider="true"
-            android:persistent="false" />
-
-        <ListPreference
-            android:key="quiet_hours"
-            android:title="@string/settings_quiet_hours"
-            android:entries="@array/quiet_entries"
-            android:entryValues="@array/quiet_values"
-            app:useSimpleSummaryProvider="true"
-            android:persistent="false" />
-
-        <SwitchPreferenceCompat
-            android:key="open_glyph_flip"
-            android:title="@string/settings_flip"
-            android:summary="@string/settings_flip_summary"
-            android:persistent="false" />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:key="notification_style"
-        android:title="@string/settings_notification_style">
-
-        <MultiSelectListPreference
-            android:key="open_glyph_essential_apps"
-            android:title="@string/settings_essential"
-            android:summary="@string/settings_essential_summary"
-            android:persistent="false" />
-
-        <Preference
-            android:key="app_patterns"
-            android:title="@string/settings_patterns"
-            android:summary="@string/settings_patterns_summary" />
-    </PreferenceCategory>
-
-    <PreferenceCategory
-        android:key="toys"
-        android:title="@string/settings_toys">
-
-        <SwitchPreferenceCompat
-            android:key="open_glyph_toys"
-            android:title="@string/settings_toys_switch"
-            android:summary="@string/settings_toys_summary"
-            android:persistent="false" />
-
-        <SwitchPreferenceCompat
-            android:key="open_glyph_toy_clock"
-            android:dependency="open_glyph_toys"
-            android:title="@string/toy_clock"
-            android:persistent="false" />
-
-        <SwitchPreferenceCompat
-            android:key="open_glyph_toy_battery"
-            android:dependency="open_glyph_toys"
-            android:title="@string/toy_battery"
-            android:persistent="false" />
-
-        <SwitchPreferenceCompat
-            android:key="open_glyph_toy_stopwatch"
-            android:dependency="open_glyph_toys"
-            android:title="@string/toy_stopwatch"
-            android:summary="@string/toy_stopwatch_summary"
-            android:persistent="false" />
+        <org.openglyph.TilePreference
+            android:key="open_glyph_bedtime"
+            android:title="@string/settings_bedtime"
+            android:icon="@drawable/ic_og_bedtime"
+            app:tileSwitch="true" />
     </PreferenceCategory>
 
     <com.android.settingslib.widget.FooterPreference

@@ -30,6 +30,9 @@ import org.openglyph.core.Renderer;
 import org.openglyph.core.SysfsMatrixSink;
 import org.openglyph.effects.Effects;
 import org.openglyph.core.AppPatterns;
+import org.openglyph.core.EssentialRule;
+import org.openglyph.core.GlyphIcons;
+import org.openglyph.core.Frame;
 import org.openglyph.toys.IdleLayer;
 import org.openglyph.toys.RemoteToy;
 import org.openglyph.toys.Toy;
@@ -69,7 +72,10 @@ public final class GlyphService extends Service {
     private final IdleLayer mIdle = new IdleLayer(this::toyContext);
     private IdleController mIdleController;
     private volatile Map<String, String> mAppPatterns = new HashMap<>();
-    private volatile java.util.Set<String> mEssentialApps = new java.util.HashSet<>();
+    private volatile List<EssentialRule> mEssentialRules = new ArrayList<>();
+    private volatile boolean mBedtime;
+    /** Package and rule of the Essential Notification on the matrix, to skip redundant redraws. */
+    private String mEssentialShown = "";
 
     static GlyphService get() {
         return sInstance;
@@ -99,6 +105,9 @@ public final class GlyphService extends Service {
         mIdleController.start();
         mToyBridge = new NothingToyBridge(this, mHandler, this::onSdkToysChanged);
         mToyBridge.start();
+        mIdleController.setAodListener(this::onAod);
+        mIdleController.setBedtimeListener(this::onBedtime);
+        mIdleController.update();
 
         registerReceiver(mPowerReceiver, new IntentFilter(Intent.ACTION_POWER_CONNECTED));
         // Sent by the device KeyHandler in system_server; same uid, so PERMISSION holds for it.
@@ -147,31 +156,59 @@ public final class GlyphService extends Service {
     /** Called by the notification listener for each alert-worthy notification. */
     void onNotification(String pkg) {
         if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.NOTIFICATIONS)) return;
-        Effects.Pattern pattern = Effects.Pattern.parse(mAppPatterns.get(pkg), Effects.Pattern.RING);
+        Effects.Pattern fallback = Effects.Pattern.parse(GlyphSettings.string(getContentResolver(),
+                GlyphSettings.DEFAULT_PATTERN, "RING"), Effects.Pattern.RING);
+        Effects.Pattern pattern = Effects.Pattern.parse(mAppPatterns.get(pkg), fallback);
         mPulse.trigger(SystemClock.uptimeMillis(), pattern);
         mRenderer.invalidate();
     }
 
-    boolean isEssentialApp(String pkg) {
-        return mEssentialApps.contains(pkg);
+    List<EssentialRule> essentialRules() {
+        return mEssentialRules;
     }
 
-    /** Called by the listener whenever the set of waiting essential notifications changes. */
-    void setEssentialWaiting(boolean waiting) {
-        mIdle.setEssential(waiting);
+    /**
+     * Called by the listener with the newest waiting notification that matches an Essential
+     * Notifications rule (pkg and rule), or nulls when none is waiting.
+     */
+    void setEssential(String pkg, EssentialRule rule) {
+        String key = rule == null ? "" : pkg + "\n" + rule.icon;
+        if (key.equals(mEssentialShown)) return;
+        mEssentialShown = key;
+        mIdle.setEssential(rule == null ? null : essentialIcon(pkg, rule.icon));
         mRenderer.invalidate();
     }
 
-    private void applySettings() {
+    int[] essentialIcon(String pkg, String icon) {
+        int[] grid = EssentialRule.ICON_APP.equals(icon) ? AppIconMatrix.render(this, pkg) : null;
+        if (grid == null) grid = GlyphIcons.render(icon, Frame.MAX);
+        return grid != null ? grid : GlyphIcons.render("bell", Frame.MAX);
+    }
+
+    /** Bedtime schedule: every Glyph light stays off while it is on. */
+    private void onBedtime(boolean on) {
+        if (on == mBedtime) return;
+        mBedtime = on;
+        Log.i(TAG, on ? "bedtime: lights off" : "bedtime over");
+        applyBrightness();
+    }
+
+    private void applyBrightness() {
         boolean enabled = GlyphSettings.flag(getContentResolver(), GlyphSettings.ENABLED);
-        mRenderer.setBrightness(enabled ? GlyphSettings.brightness(getContentResolver()) : 0);
+        mRenderer.setBrightness(enabled && !mBedtime
+                ? GlyphSettings.brightness(getContentResolver()) : 0);
+    }
+
+    private void applySettings() {
+        applyBrightness();
         List<String> ids = new ArrayList<>();
         for (Toy t : mToys.allToys()) ids.add(t.id());
-        mToys.setEnabled(GlyphSettings.enabledToys(getContentResolver(), ids));
+        mToys.setOrder(GlyphSettings.activeToys(getContentResolver(), ids));
+        if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS)) mToys.deselect();
         mAppPatterns = AppPatterns.parse(
                 GlyphSettings.string(getContentResolver(), GlyphSettings.APP_PATTERNS, ""));
-        mEssentialApps = AppPatterns.parseSet(
-                GlyphSettings.string(getContentResolver(), GlyphSettings.ESSENTIAL_APPS, ""));
+        mEssentialRules = GlyphSettings.essentialRules(getContentResolver());
+        mEssentialShown = "\u0000"; // icons may have changed: redraw
         GlyphNotificationListener.refreshEssential();
         if (mRecordLed != null) mRecordLed.update();
         if (mIdleController != null) mIdleController.update();
@@ -188,13 +225,38 @@ public final class GlyphService extends Service {
         applySettings();
     }
 
+    /** Always-on shown/hidden (and every minute while shown): drive the always-on SDK toy. */
+    private void onAod(boolean shown) {
+        String id = GlyphSettings.string(getContentResolver(), GlyphSettings.AOD_TOY, "");
+        RemoteToy toy = shown && !id.isEmpty() ? mToyBridge.byId(id) : null;
+        if (toy != null && toy.aodSupported()) {
+            mIdle.setRemoteToy(toy);
+            mToyBridge.aodTick(toy);
+        } else {
+            mIdle.setRemoteToy(null);
+            mToyBridge.stopAod();
+        }
+    }
+
+    private void setPackageTimeout(String pkg, boolean timeout) {
+        RemoteToy toy = mToyBridge.boundToyOf(pkg);
+        if (toy != null) {
+            toy.setNoTimeout(!timeout);
+            mRenderer.invalidate();
+        }
+    }
+
+    NothingToyBridge toyBridge() {
+        return mToyBridge;
+    }
+
     List<RemoteToy> sdkToys() {
         return mToyBridge == null ? List.of() : mToyBridge.toys();
     }
 
     /** From OpenGlyphCompat: a frame drawn by an app built with Nothing's SDK. */
     private void showPackageFrame(String pkg, int[] grid) {
-        RemoteToy toy = mToyBridge.toyOf(pkg);
+        RemoteToy toy = mToyBridge.boundToyOf(pkg);
         if (toy != null) {
             toy.setFrame(grid);
         } else {
@@ -218,8 +280,28 @@ public final class GlyphService extends Service {
     /** Apps (not toys) drawing through the SDK sit just above toys, below notifications. */
     static final int APP_FRAME_PRIORITY = 20;
 
-    /** Called from the render thread for every toy frame. */
-    private Toy.Context toyContext() {
+    /** All toys, built-in first, for Settings. */
+    List<Toy> allToys() {
+        return mToys.allToys();
+    }
+
+    /** Settings "try it": show one toy on the matrix now. */
+    void showToy(String id) {
+        mToys.show(id, SystemClock.uptimeMillis());
+        mRenderer.invalidate();
+    }
+
+    /** What the matrix shows right now, for the Settings preview. */
+    void snapshot(int[] grid) {
+        mRenderer.snapshot(grid);
+    }
+
+    boolean isBedtime() {
+        return mBedtime;
+    }
+
+    /** Called from the render thread for every toy frame (and by Settings previews). */
+    Toy.Context toyContext() {
         Toy.Context ctx = new Toy.Context();
         BatteryManager bm = getSystemService(BatteryManager.class);
         ctx.batteryPercent = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
@@ -229,6 +311,17 @@ public final class GlyphService extends Service {
         ctx.minute = now.get(Calendar.MINUTE);
         return ctx;
     }
+
+    private final IBinder mPreviewToken = new android.os.Binder();
+
+    /** Settings preview: shows a picture for a few seconds, over toys and the idle layer. */
+    void previewFrame(int[] grid) {
+        showClientFrame(mPreviewToken, grid, 60);
+        mHandler.removeCallbacks(mEndPreview);
+        mHandler.postDelayed(mEndPreview, 3000);
+    }
+
+    private final Runnable mEndPreview = () -> dropClient(mPreviewToken);
 
     /** Settings screen "test" button: one notification pulse, regardless of the switch. */
     void testPulse() {
@@ -337,6 +430,12 @@ public final class GlyphService extends Service {
         public void clearPackageFrame(String pkg) {
             enforceCallingPermission(PERMISSION, "clearPackageFrame");
             if (pkg != null) GlyphService.this.clearPackageFrame(pkg);
+        }
+
+        @Override
+        public void setPackageTimeout(String pkg, boolean timeout) {
+            enforceCallingPermission(PERMISSION, "setPackageTimeout");
+            if (pkg != null) mHandler.post(() -> GlyphService.this.setPackageTimeout(pkg, timeout));
         }
 
         @Override

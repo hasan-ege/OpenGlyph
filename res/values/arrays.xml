@@ -1,34 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string-array name="aod_entries">
-        <item>@string/aod_off</item>
+    <string-array name="aod_when_entries">
         <item>@string/aod_always</item>
         <item>@string/aod_face_down</item>
         <item>@string/aod_charging</item>
     </string-array>
-    <string-array name="aod_values" translatable="false">
-        <item>OFF</item>
+    <string-array name="aod_when_values" translatable="false">
         <item>ALWAYS</item>
         <item>FACE_DOWN</item>
         <item>CHARGING</item>
     </string-array>
 
-    <!-- start-end hours; "off" = no quiet period -->
-    <string-array name="quiet_entries">
-        <item>@string/quiet_off</item>
-        <item>22:00 – 07:00</item>
-        <item>23:00 – 07:00</item>
-        <item>00:00 – 07:00</item>
-        <item>23:00 – 08:00</item>
-    </string-array>
-    <string-array name="quiet_values" translatable="false">
-        <item>off</item>
-        <item>22-7</item>
-        <item>23-7</item>
-        <item>0-7</item>
-        <item>23-8</item>
-    </string-array>
-
+    <!-- Per-app pattern: DEFAULT follows the default pattern setting. -->
     <string-array name="pattern_entries">
         <item>@string/pattern_default</item>
         <item>@string/pattern_ring</item>
@@ -42,5 +25,25 @@
         <item>SWEEP</item>
         <item>DOT</item>
         <item>FLASH</item>
+    </string-array>
+    <string-array name="default_pattern_entries">
+        <item>@string/pattern_ring</item>
+        <item>@string/pattern_sweep</item>
+        <item>@string/pattern_dot</item>
+        <item>@string/pattern_flash</item>
+    </string-array>
+    <string-array name="default_pattern_values" translatable="false">
+        <item>RING</item>
+        <item>SWEEP</item>
+        <item>DOT</item>
+        <item>FLASH</item>
+    </string-array>
+
+    <!-- Monday first, like the bedtime bitmask. -->
+    <string-array name="day_letters">
+        <item>M</item><item>T</item><item>W</item><item>T</item><item>F</item><item>S</item><item>S</item>
+    </string-array>
+    <string-array name="day_short_names">
+        <item>Mon</item><item>Tue</item><item>Wed</item><item>Thu</item><item>Fri</item><item>Sat</item><item>Sun</item>
     </string-array>
 </resources>

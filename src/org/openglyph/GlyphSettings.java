@@ -4,8 +4,14 @@ import android.content.ContentResolver;
 import android.net.Uri;
 import android.provider.Settings;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+
+import org.openglyph.core.AppPatterns;
+import org.openglyph.core.Bedtime;
+import org.openglyph.core.EssentialRule;
 
 /**
  * OpenGlyph's settings, stored in Settings.Secure so the service, the Settings screen and
@@ -21,15 +27,23 @@ final class GlyphSettings {
     static final String TOYS = "open_glyph_toys";                    // 1/0, default 1
     static final String TOY_PREFIX = "open_glyph_toy_";              // + toy id, 1/0, default 1
     static final String AOD = "open_glyph_aod";                      // OFF|ALWAYS|FACE_DOWN|CHARGING
-    static final String NIGHT_START = "open_glyph_night_start";      // hour, -1 = none, default 23
-    static final String NIGHT_END = "open_glyph_night_end";          // hour, default 7
+    static final String BEDTIME = "open_glyph_bedtime";              // 1/0, default 0
+    static final String BEDTIME_START = "open_glyph_bedtime_start";  // minute of day, default 23:00
+    static final String BEDTIME_END = "open_glyph_bedtime_end";      // minute of day, default 07:00
+    static final String BEDTIME_DAYS = "open_glyph_bedtime_days";    // bitmask, Monday = bit 0
     static final String FLIP = "open_glyph_flip";                    // 1/0, default 0
-    static final String ESSENTIAL_APPS = "open_glyph_essential_apps"; // "pkg,pkg"
+    /** Old essential-apps setting ("pkg,pkg"); read once to seed the first rule. */
+    static final String ESSENTIAL_APPS = "open_glyph_essential_apps";
+    static final String ESSENTIAL_RULES = "open_glyph_essential_rules"; // EssentialRule.format
+    static final String DEFAULT_PATTERN = "open_glyph_pattern";      // RING|SWEEP|DOT|FLASH
     static final String APP_PATTERNS = "open_glyph_app_patterns";    // "pkg=RING;pkg=SWEEP"
+    static final String AOD_TOY = "open_glyph_aod_toy";              // "" = clock, else SDK toy id
+    static final String TOY_ORDER = "open_glyph_toy_order";          // active toy ids, "a,b,c"
 
     static final String[] ALL = {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
-        AOD, NIGHT_START, NIGHT_END, FLIP, ESSENTIAL_APPS, APP_PATTERNS,
+        AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
+        APP_PATTERNS, DEFAULT_PATTERN, AOD_TOY, TOY_ORDER,
     };
 
     private GlyphSettings() {}
@@ -67,6 +81,57 @@ final class GlyphSettings {
         Set<String> out = new HashSet<>();
         for (String id : toyIds) if (flag(cr, toyKey(id))) out.add(id);
         return out;
+    }
+
+    /**
+     * Active toys in Glyph Button order. Until the user arranges them in Settings, every toy
+     * whose own switch is on (the older per-toy setting, default on) in the given order.
+     */
+    static List<String> activeToys(ContentResolver cr, List<String> allIds) {
+        String order = Settings.Secure.getString(cr, TOY_ORDER);
+        List<String> out = new ArrayList<>();
+        if (order == null) {
+            for (String id : allIds) if (flag(cr, toyKey(id))) out.add(id);
+            return out;
+        }
+        for (String id : order.split(",")) if (!id.isEmpty() && !out.contains(id)) out.add(id);
+        return out;
+    }
+
+    static void setActiveToys(ContentResolver cr, List<String> ids) {
+        Settings.Secure.putString(cr, TOY_ORDER, String.join(",", ids));
+    }
+
+    static List<EssentialRule> essentialRules(ContentResolver cr) {
+        String v = Settings.Secure.getString(cr, ESSENTIAL_RULES);
+        if (v != null) return EssentialRule.parse(v);
+        // First run after the update: the old essential apps become the first rule.
+        List<EssentialRule> rules = new ArrayList<>();
+        Set<String> apps = AppPatterns.parseSet(string(cr, ESSENTIAL_APPS, ""));
+        if (!apps.isEmpty()) {
+            EssentialRule r = new EssentialRule();
+            r.name = "Default";
+            r.apps.addAll(apps);
+            r.icon = EssentialRule.ICON_APP;
+            rules.add(r);
+        }
+        return rules;
+    }
+
+    static void setEssentialRules(ContentResolver cr, List<EssentialRule> rules) {
+        Settings.Secure.putString(cr, ESSENTIAL_RULES, EssentialRule.format(rules));
+    }
+
+    static int bedtimeStart(ContentResolver cr) {
+        return integer(cr, BEDTIME_START, 23 * 60);
+    }
+
+    static int bedtimeEnd(ContentResolver cr) {
+        return integer(cr, BEDTIME_END, 7 * 60);
+    }
+
+    static int bedtimeDays(ContentResolver cr) {
+        return integer(cr, BEDTIME_DAYS, Bedtime.EVERY_DAY);
     }
 
     static Uri uri(String key) {

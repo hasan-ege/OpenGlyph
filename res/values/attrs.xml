@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="TilePreference">
+        <!-- Half width: two tiles side by side. -->
+        <attr name="tileHalf" format="boolean" />
+        <!-- Shows a switch in the tile's top corner. -->
+        <attr name="tileSwitch" format="boolean" />
+    </declare-styleable>
+</resources>

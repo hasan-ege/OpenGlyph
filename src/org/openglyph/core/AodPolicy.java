@@ -17,25 +17,16 @@ public final class AodPolicy {
 
     private AodPolicy() {}
 
-    /**
-     * @param nightStart hour the quiet period starts (0..23), or -1 for no quiet period
-     * @param nightEnd   hour it ends (0..23); may be before nightStart (crosses midnight)
-     */
+    /** @param bedtime the bedtime schedule ({@link Bedtime}) is on right now */
     public static boolean shouldShow(Mode mode, boolean screenOff, boolean faceDown,
-            boolean charging, int hour, int nightStart, int nightEnd) {
-        if (!screenOff) return false;
-        if (isNight(hour, nightStart, nightEnd)) return false;
+            boolean charging, boolean bedtime) {
+        if (!screenOff || bedtime) return false;
         switch (mode) {
             case ALWAYS: return true;
             case FACE_DOWN: return faceDown;
             case CHARGING: return charging;
             default: return false;
         }
-    }
-
-    public static boolean isNight(int hour, int start, int end) {
-        if (start < 0 || end < 0 || start == end) return false;
-        return start < end ? hour >= start && hour < end : hour >= start || hour < end;
     }
 
     /** Face down = gravity mostly along -z (screen towards the table). */

@@ -19,10 +19,11 @@ import android.util.Log;
 import java.util.Calendar;
 
 import org.openglyph.core.AodPolicy;
+import org.openglyph.core.Bedtime;
 import org.openglyph.toys.IdleLayer;
 
 /**
- * Always-on Glyph and Flip to Glyph.
+ * Always-on Glyph, Flip to Glyph and the bedtime schedule.
  *
  * - Watches screen on/off and the charger, and (only while a feature needs it) the
  *   accelerometer for "face down".
@@ -36,6 +37,17 @@ final class IdleController implements SensorEventListener {
     private final Handler mHandler;
     private final IdleLayer mIdle;
     private final Runnable mInvalidate;
+    /** Told on every evaluation (and so on every minute alarm) whether always-on is shown. */
+    interface AodListener {
+        void onAod(boolean shown);
+    }
+    private AodListener mAodListener = shown -> {};
+    /** Told on every evaluation whether the bedtime schedule is on right now. */
+    interface BedtimeListener {
+        void onBedtime(boolean on);
+    }
+    private BedtimeListener mBedtimeListener = on -> {};
+    private boolean mBedtimeAlarmSet;
     private final SensorManager mSensors;
     private final AlarmManager mAlarms;
     private final AudioManager mAudio;
@@ -57,6 +69,14 @@ final class IdleController implements SensorEventListener {
         mAudio = context.getSystemService(AudioManager.class);
     }
 
+    void setAodListener(AodListener l) {
+        mAodListener = l;
+    }
+
+    void setBedtimeListener(BedtimeListener l) {
+        mBedtimeListener = l;
+    }
+
     void start() {
         PowerManager pm = mContext.getSystemService(PowerManager.class);
         mScreenOff = !pm.isInteractive();
@@ -66,6 +86,8 @@ final class IdleController implements SensorEventListener {
         f.addAction(Intent.ACTION_SCREEN_OFF);
         f.addAction(Intent.ACTION_POWER_CONNECTED);
         f.addAction(Intent.ACTION_POWER_DISCONNECTED);
+        f.addAction(Intent.ACTION_TIME_CHANGED);
+        f.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         mContext.registerReceiver(mReceiver, f, null, mHandler);
         update();
     }
@@ -74,6 +96,7 @@ final class IdleController implements SensorEventListener {
         mContext.unregisterReceiver(mReceiver);
         setSensor(false);
         cancelMinuteAlarm();
+        cancelBedtimeAlarm();
         restoreRinger();
     }
 
@@ -90,12 +113,20 @@ final class IdleController implements SensorEventListener {
         setSensor(flip || mode == AodPolicy.Mode.FACE_DOWN);
         if (!flip) restoreRinger();
 
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        boolean show = AodPolicy.shouldShow(mode, mScreenOff, mFaceDown, mCharging, hour,
-                GlyphSettings.integer(cr, GlyphSettings.NIGHT_START, 23),
-                GlyphSettings.integer(cr, GlyphSettings.NIGHT_END, 7));
+        Calendar now = Calendar.getInstance();
+        int minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        boolean schedule = enabled && GlyphSettings.flagDefaultOff(cr, GlyphSettings.BEDTIME);
+        int start = GlyphSettings.bedtimeStart(cr), end = GlyphSettings.bedtimeEnd(cr);
+        boolean bedtime = schedule && Bedtime.isActive(start, end, GlyphSettings.bedtimeDays(cr),
+                Bedtime.dayIndex(now.get(Calendar.DAY_OF_WEEK)), minute);
+        cancelBedtimeAlarm();
+        if (schedule) scheduleBedtimeAlarm(Bedtime.minutesToNextChange(start, end, minute));
+        mBedtimeListener.onBedtime(bedtime);
+
+        boolean show = AodPolicy.shouldShow(mode, mScreenOff, mFaceDown, mCharging, bedtime);
         mIdle.setAlwaysOn(show);
         if (show) scheduleMinuteAlarm(); else cancelMinuteAlarm();
+        mAodListener.onAod(show);
         mInvalidate.run();
     }
 
@@ -165,9 +196,31 @@ final class IdleController implements SensorEventListener {
         mAlarmSet = false;
     }
 
+    /** Wakes at the next bedtime start or end (whole minutes from now). */
+    private void scheduleBedtimeAlarm(int minutes) {
+        Calendar at = Calendar.getInstance();
+        at.set(Calendar.SECOND, 0);
+        at.set(Calendar.MILLISECOND, 0);
+        at.add(Calendar.MINUTE, minutes);
+        mAlarms.setExact(AlarmManager.RTC_WAKEUP, at.getTimeInMillis(), "OpenGlyph:bedtime",
+                mBedtimeAlarm, mHandler);
+        mBedtimeAlarmSet = true;
+    }
+
+    private void cancelBedtimeAlarm() {
+        if (!mBedtimeAlarmSet) return;
+        mAlarms.cancel(mBedtimeAlarm);
+        mBedtimeAlarmSet = false;
+    }
+
+    private final AlarmManager.OnAlarmListener mBedtimeAlarm = () -> {
+        mBedtimeAlarmSet = false;
+        update();
+    };
+
     private final AlarmManager.OnAlarmListener mMinuteAlarm = () -> {
         mAlarmSet = false;
-        update(); // redraws the clock, re-checks the quiet period, re-arms if still shown
+        update(); // redraws the clock, re-checks bedtime, re-arms if still shown
     };
 
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
@@ -178,6 +231,9 @@ final class IdleController implements SensorEventListener {
                 case Intent.ACTION_SCREEN_OFF -> mScreenOff = true;
                 case Intent.ACTION_POWER_CONNECTED -> mCharging = true;
                 case Intent.ACTION_POWER_DISCONNECTED -> mCharging = false;
+                case Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
+                    cancelMinuteAlarm(); // re-armed for the new wall-clock minute below
+                }
                 default -> { return; }
             }
             update();

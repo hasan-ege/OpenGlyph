@@ -1,158 +1,167 @@
 package org.openglyph;
 
 import android.content.ContentResolver;
+import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.format.DateFormat;
 
-import androidx.preference.ListPreference;
-import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
 import androidx.preference.SeekBarPreference;
-import androidx.preference.TwoStatePreference;
 
 import com.android.settingslib.widget.MainSwitchPreference;
-import com.android.settingslib.widget.SettingsBasePreferenceFragment;
 
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
-import java.util.Set;
 
-import org.openglyph.core.AppPatterns;
+import org.openglyph.core.Bedtime;
 
 /**
- * Every switch is non-persistent and mirrors a Settings.Secure key of the same name, which the
- * service observes; nothing is stored in SharedPreferences.
+ * Glyph Interface (Settings > Glyph Matrix). Every value lives in a Settings.Secure key that
+ * the service observes; nothing is stored in SharedPreferences.
  */
-public final class GlyphSettingsFragment extends SettingsBasePreferenceFragment {
-    private static final String[] SWITCHES = {
-        GlyphSettings.NOTIFICATIONS, GlyphSettings.CALLS, GlyphSettings.CHARGING,
-        GlyphSettings.RECORD_LED, GlyphSettings.TOYS,
-        GlyphSettings.toyKey("clock"), GlyphSettings.toyKey("battery"),
-        GlyphSettings.toyKey("stopwatch"),
+public final class GlyphSettingsFragment extends GlyphFragment {
+    /** Tile switches that map 1:1 to a flag (default on). */
+    private static final String[] FLAGS = {
+        GlyphSettings.TOYS, GlyphSettings.NOTIFICATIONS, GlyphSettings.CALLS,
+        GlyphSettings.CHARGING, GlyphSettings.RECORD_LED,
     };
+
+    @Override
+    int titleRes() {
+        return R.string.app_name;
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         setPreferencesFromResource(R.xml.glyph_settings, rootKey);
-        ContentResolver cr = requireContext().getContentResolver();
+        ContentResolver cr = cr();
 
         MainSwitchPreference main = findPreference(GlyphSettings.ENABLED);
-        main.setChecked(GlyphSettings.flag(cr, GlyphSettings.ENABLED));
         main.addOnSwitchChangeListener((button, on) -> {
             GlyphSettings.setFlag(cr, GlyphSettings.ENABLED, on);
             updateEnabledState(on);
         });
 
         SeekBarPreference brightness = findPreference(GlyphSettings.BRIGHTNESS);
-        brightness.setValue(GlyphSettings.brightness(cr));
         brightness.setOnPreferenceChangeListener((p, value) -> {
-            android.provider.Settings.Secure.putInt(cr, GlyphSettings.BRIGHTNESS, (Integer) value);
+            Settings.Secure.putInt(cr, GlyphSettings.BRIGHTNESS, (Integer) value);
             return true;
         });
 
-        for (String key : SWITCHES) {
-            TwoStatePreference sw = findPreference(key);
-            sw.setChecked(GlyphSettings.flag(cr, key));
-            sw.setOnPreferenceChangeListener((p, value) -> {
-                GlyphSettings.setFlag(cr, key, (Boolean) value);
-                return true;
-            });
+        for (String key : FLAGS) {
+            tile(key).setSwitch(GlyphSettings.flag(cr, key),
+                    (t, on) -> GlyphSettings.setFlag(cr, key, on));
         }
-
-        // Toys from apps built with Nothing's Glyph Matrix SDK, after the built-in ones.
-        androidx.preference.PreferenceCategory toyCategory = findPreference("toys");
-        GlyphService service = GlyphService.get();
-        if (service != null) {
-            for (org.openglyph.toys.RemoteToy toy : service.sdkToys()) {
-                String key = GlyphSettings.toyKey(toy.id());
-                androidx.preference.SwitchPreferenceCompat sw =
-                        new androidx.preference.SwitchPreferenceCompat(requireContext());
-                sw.setKey(key);
-                sw.setPersistent(false);
-                sw.setTitle(toy.label());
-                sw.setSummary(getString(R.string.toy_sdk_summary));
-                sw.setChecked(GlyphSettings.flag(cr, key));
-                sw.setOnPreferenceChangeListener((p, value) -> {
-                    GlyphSettings.setFlag(cr, key, (Boolean) value);
-                    return true;
-                });
-                toyCategory.addPreference(sw);
-                sw.setDependency(GlyphSettings.TOYS);
+        tile(GlyphSettings.FLIP).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP),
+                (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.FLIP, on));
+        tile(GlyphSettings.AOD).setSwitch(false, (t, on) -> {
+            String mode = GlyphSettings.string(cr, GlyphSettings.AOD, "OFF");
+            if (on && "OFF".equals(mode)) mode = "ALWAYS";
+            if (!on) {
+                // Remember the chosen mode for the next time it is switched on.
+                if (!"OFF".equals(mode)) Settings.Secure.putString(cr, AodToyFragment.LAST_MODE, mode);
+                mode = "OFF";
+            } else if ("ALWAYS".equals(mode)) {
+                mode = GlyphSettings.string(cr, AodToyFragment.LAST_MODE, "ALWAYS");
             }
+            Settings.Secure.putString(cr, GlyphSettings.AOD, mode);
+            refresh();
+        });
+        tile(GlyphSettings.BEDTIME).setSwitch(false, (t, on) -> {
+            GlyphSettings.setFlag(cr, GlyphSettings.BEDTIME, on);
+            refresh();
+        });
+
+        link(GlyphSettings.TOYS, ToysFragment::new);
+        link(GlyphSettings.NOTIFICATIONS, NotificationsFragment::new);
+        link("essential", EssentialFragment::new);
+        link(GlyphSettings.AOD, AodToyFragment::new);
+        link(GlyphSettings.BEDTIME, BedtimeFragment::new);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        refresh();
+    }
+
+    private TilePreference tile(String key) {
+        return findPreference(key);
+    }
+
+    /** Re-reads everything: sub-screens and adb may have changed values meanwhile. */
+    private void refresh() {
+        Context c = requireContext();
+        ContentResolver cr = cr();
+        MainSwitchPreference main = findPreference(GlyphSettings.ENABLED);
+        main.setChecked(GlyphSettings.flag(cr, GlyphSettings.ENABLED));
+        ((SeekBarPreference) findPreference(GlyphSettings.BRIGHTNESS))
+                .setValue(GlyphSettings.brightness(cr));
+        for (String key : FLAGS) tile(key).setChecked(GlyphSettings.flag(cr, key));
+        tile(GlyphSettings.FLIP).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP));
+
+        // Toys: a strip of the active toys, like the stock tile.
+        List<ToyCatalog.Entry> toys = ToyCatalog.all(c);
+        List<String> ids = new ArrayList<>();
+        for (ToyCatalog.Entry e : toys) ids.add(e.id);
+        List<Drawable> strip = new ArrayList<>();
+        int size = getResources().getDimensionPixelSize(R.dimen.og_toy_strip_icon);
+        for (String id : GlyphSettings.activeToys(cr, ids)) {
+            ToyCatalog.Entry e = ToyCatalog.byId(toys, id);
+            if (e != null && strip.size() < 5) strip.add(ToyCatalog.icon(e, size));
         }
+        tile(GlyphSettings.TOYS).setStrip(strip);
 
-        TwoStatePreference flip = findPreference(GlyphSettings.FLIP);
-        flip.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP));
-        flip.setOnPreferenceChangeListener((p, value) -> {
-            GlyphSettings.setFlag(cr, GlyphSettings.FLIP, (Boolean) value);
-            return true;
-        });
+        tile(GlyphSettings.NOTIFICATIONS).setSummary(R.string.settings_notifications_short);
+        int rules = 0;
+        for (org.openglyph.core.EssentialRule r : GlyphSettings.essentialRules(cr)) if (r.enabled) rules++;
+        tile("essential").setSummary(rules == 0 ? c.getString(R.string.essential_none)
+                : c.getResources().getQuantityString(R.plurals.essential_rules, rules, rules));
 
-        ListPreference aod = findPreference(GlyphSettings.AOD);
-        aod.setValue(GlyphSettings.string(cr, GlyphSettings.AOD, "OFF"));
-        aod.setOnPreferenceChangeListener((p, value) -> {
-            Settings.Secure.putString(cr, GlyphSettings.AOD, (String) value);
-            return true;
-        });
+        String mode = GlyphSettings.string(cr, GlyphSettings.AOD, "OFF");
+        TilePreference aod = tile(GlyphSettings.AOD);
+        aod.setChecked(!"OFF".equals(mode));
+        aod.setSummary("OFF".equals(mode) ? c.getString(R.string.aod_off) : AodToyFragment.summary(c));
 
-        ListPreference quiet = findPreference("quiet_hours");
-        int start = GlyphSettings.integer(cr, GlyphSettings.NIGHT_START, 23);
-        int end = GlyphSettings.integer(cr, GlyphSettings.NIGHT_END, 7);
-        String current = start < 0 ? "off" : start + "-" + end;
-        quiet.setValue(quiet.findIndexOfValue(current) >= 0 ? current : "23-7");
-        quiet.setOnPreferenceChangeListener((p, value) -> {
-            String v = (String) value;
-            if ("off".equals(v)) {
-                Settings.Secure.putInt(cr, GlyphSettings.NIGHT_START, -1);
-            } else {
-                String[] se = v.split("-");
-                Settings.Secure.putInt(cr, GlyphSettings.NIGHT_START, Integer.parseInt(se[0]));
-                Settings.Secure.putInt(cr, GlyphSettings.NIGHT_END, Integer.parseInt(se[1]));
-            }
-            return true;
-        });
-
-        MultiSelectListPreference essential = findPreference(GlyphSettings.ESSENTIAL_APPS);
-        List<AppList.App> apps = AppList.launchable(requireContext());
-        CharSequence[] labels = new CharSequence[apps.size()];
-        CharSequence[] pkgs = new CharSequence[apps.size()];
-        for (int i = 0; i < apps.size(); i++) {
-            labels[i] = apps.get(i).label;
-            pkgs[i] = apps.get(i).pkg;
-        }
-        essential.setEntries(labels);
-        essential.setEntryValues(pkgs);
-        essential.setValues(AppPatterns.parseSet(
-                GlyphSettings.string(cr, GlyphSettings.ESSENTIAL_APPS, "")));
-        essential.setOnPreferenceChangeListener((p, value) -> {
-            @SuppressWarnings("unchecked")
-            Set<String> chosen = new HashSet<>((Set<String>) value);
-            Settings.Secure.putString(cr, GlyphSettings.ESSENTIAL_APPS, AppPatterns.formatSet(chosen));
-            return true;
-        });
-
-        findPreference("app_patterns").setOnPreferenceClickListener(p -> {
-            getParentFragmentManager()
-                    .beginTransaction()
-                    .replace(getId(), new AppPatternsFragment())
-                    .addToBackStack(null)
-                    .commit();
-            return true;
-        });
-
-        Preference test = findPreference("test");
-        test.setOnPreferenceClickListener(p -> {
-            GlyphService running = GlyphService.get();
-            if (running != null) running.testPulse();
-            return true;
-        });
+        TilePreference bedtime = tile(GlyphSettings.BEDTIME);
+        bedtime.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.BEDTIME));
+        bedtime.setSummary(bedtimeSummary(c));
 
         updateEnabledState(main.isChecked());
     }
 
+    /** "23:00 – 07:00, Every day" */
+    static String bedtimeSummary(Context c) {
+        ContentResolver cr = c.getContentResolver();
+        return c.getString(R.string.bedtime_summary,
+                time(c, GlyphSettings.bedtimeStart(cr)), time(c, GlyphSettings.bedtimeEnd(cr)),
+                days(c, GlyphSettings.bedtimeDays(cr)));
+    }
+
+    static String time(Context c, int minuteOfDay) {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.HOUR_OF_DAY, minuteOfDay / 60);
+        cal.set(Calendar.MINUTE, minuteOfDay % 60);
+        return DateFormat.getTimeFormat(c).format(cal.getTime());
+    }
+
+    static String days(Context c, int mask) {
+        if (mask == Bedtime.EVERY_DAY) return c.getString(R.string.days_every_day);
+        if (mask == Bedtime.WEEKDAYS) return c.getString(R.string.days_weekdays);
+        if (mask == Bedtime.WEEKEND) return c.getString(R.string.days_weekend);
+        if (mask == 0) return c.getString(R.string.days_never);
+        String[] names = c.getResources().getStringArray(R.array.day_short_names);
+        List<String> on = new ArrayList<>();
+        for (int d = 0; d < 7; d++) if ((mask & (1 << d)) != 0) on.add(names[d]);
+        return String.join(", ", on);
+    }
+
     private void updateEnabledState(boolean on) {
-        for (String key : new String[] {GlyphSettings.BRIGHTNESS, "effects", "nothing_style",
-                "notification_style", "toys"}) {
+        for (String key : new String[] {"hero", GlyphSettings.BRIGHTNESS, "toys_category",
+                "notifications_category", "features_category", "auto_off_category"}) {
             Preference p = findPreference(key);
             if (p != null) p.setEnabled(on);
         }

@@ -31,4 +31,7 @@ interface IOpenGlyph {
     void showPackageFrame(String pkg, in int[] grid);
 
     void clearPackageFrame(String pkg);
+
+    /** setGlyphMatrixTimeout() from an SDK toy: false keeps the toy on the matrix. */
+    void setPackageTimeout(String pkg, boolean timeout);
 }

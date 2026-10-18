@@ -8,9 +8,13 @@ import org.openglyph.core.Effect;
 import org.openglyph.core.Frame;
 
 /**
- * Shows toys on the Glyph Button. First tap shows the current toy, further taps (while it is on
- * screen) move to the next enabled one, long press goes to the toy. The toy disappears
- * {@link #IDLE_MS} after the last press unless it keeps the screen on (running stopwatch).
+ * The Glyph Button toy queue, following the Glyph Matrix SDK's documented behaviour:
+ *
+ * - The first press selects the current toy and shows it; a press while it is shown selects and
+ *   shows the next enabled toy. Long press goes to the selected toy ("change").
+ * - Selection and visibility are separate. The selected toy stays selected (an SDK toy stays
+ *   bound, so a timer keeps counting) until another toy is selected or it is disabled. It is
+ *   shown for {@link #IDLE_MS} after the last press, or for as long as it keeps the screen on.
  */
 public final class ToyHost implements Effect {
     public static final long IDLE_MS = 5000;
@@ -19,9 +23,8 @@ public final class ToyHost implements Effect {
     private final List<Toy> enabled = new ArrayList<>();
     private final Supplier<Toy.Context> context;
     private int index;
+    private Toy selected;
     private long visibleUntil = Long.MIN_VALUE;
-    /** The toy last reported as shown, so onShown/onHidden fire exactly once per change. */
-    private Toy shown;
 
     public ToyHost(Supplier<Toy.Context> context, Toy... toys) {
         this.context = context;
@@ -29,24 +32,17 @@ public final class ToyHost implements Effect {
         enabled.addAll(all);
     }
 
-    /** Replaces the toys after the built-in ones (e.g. Nothing SDK toys found on the device). */
-    public synchronized void setExtraToys(List<Toy> extra, int builtInCount) {
-        Toy current = current();
-        while (all.size() > builtInCount) {
-            Toy gone = all.remove(all.size() - 1);
-            if (gone == shown) {
-                gone.onHidden();
-                shown = null;
-            }
-            enabled.remove(gone);
-        }
-        all.addAll(extra);
-        enabled.addAll(extra);
-        index = Math.max(0, enabled.indexOf(current));
-    }
-
     public synchronized List<Toy> allToys() {
         return new ArrayList<>(all);
+    }
+
+    /** Replaces the toys after the built-in ones (e.g. Glyph Matrix SDK toys on the device). */
+    public synchronized void setExtraToys(List<? extends Toy> extra, int builtInCount) {
+        Toy current = current();
+        while (all.size() > builtInCount) enabled.remove(all.remove(all.size() - 1));
+        all.addAll(extra);
+        for (Toy t : extra) if (!enabled.contains(t)) enabled.add(t);
+        reconcile(current);
     }
 
     /** Enables exactly the toys whose ids are given, keeping the built-in order. */
@@ -54,73 +50,107 @@ public final class ToyHost implements Effect {
         Toy current = current();
         enabled.clear();
         for (Toy t : all) if (ids.contains(t.id())) enabled.add(t);
+        reconcile(current);
+    }
+
+    /** Enables exactly the toys whose ids are given, in that order (Settings > Manage toys). */
+    public synchronized void setOrder(List<String> ids) {
+        Toy current = current();
+        enabled.clear();
+        for (String id : ids) {
+            Toy t = byId(id);
+            if (t != null && !enabled.contains(t)) enabled.add(t);
+        }
+        reconcile(current);
+    }
+
+    public synchronized Toy byId(String id) {
+        for (Toy t : all) if (t.id().equals(id)) return t;
+        return null;
+    }
+
+    /** Selects and shows one toy now (Settings "try it"), even one that is not enabled. */
+    public synchronized void show(String id, long now) {
+        Toy t = byId(id);
+        if (t == null) return;
+        int i = enabled.indexOf(t);
+        if (i >= 0) index = i;
+        select(t);
+        visibleUntil = now + IDLE_MS;
+    }
+
+    /** Keeps the position on the same toy where possible; drops a selection that went away. */
+    private void reconcile(Toy current) {
         index = Math.max(0, enabled.indexOf(current));
-        syncShown(Long.MIN_VALUE + 1);
+        if (selected != null && !enabled.contains(selected)) select(null);
     }
 
     public synchronized Toy current() {
         return enabled.isEmpty() ? null : enabled.get(Math.min(index, enabled.size() - 1));
     }
 
+    public synchronized Toy selected() {
+        return selected;
+    }
+
     public synchronized void onTap(long now) {
         if (enabled.isEmpty()) return;
-        if (isVisible(now)) index = (index + 1) % enabled.size();
+        if (selected != null && isVisible(now)) index = (index + 1) % enabled.size();
+        select(current());
         visibleUntil = now + IDLE_MS;
-        syncShown(now);
-    }
-
-    public synchronized void onButtonDown(long now) {
-        Toy t = current();
-        if (t != null && isVisible(now)) t.onButtonDown(now);
-    }
-
-    public synchronized void onButtonUp(long now) {
-        Toy t = current();
-        if (t != null && isVisible(now)) t.onButtonUp(now);
     }
 
     public synchronized void onLongPress(long now) {
-        Toy t = current();
-        if (t == null) return;
-        t.onLongPress(now);
+        if (selected == null) return;
+        selected.onLongPress(now);
         visibleUntil = now + IDLE_MS;
     }
 
-    public synchronized void hide() {
-        visibleUntil = Long.MIN_VALUE;
-        syncShown(Long.MIN_VALUE + 1);
+    public synchronized void onButtonDown(long now) {
+        if (selected != null) selected.onButtonDown(now);
     }
 
-    /** Fires onShown/onHidden when the visible toy changed (including by timing out). */
-    private void syncShown(long now) {
-        Toy now_ = isVisible(now) ? current() : null;
-        if (now_ == shown) return;
-        if (shown != null) shown.onHidden();
-        shown = now_;
-        if (shown != null) shown.onShown();
+    public synchronized void onButtonUp(long now) {
+        if (selected != null) selected.onButtonUp(now);
+    }
+
+    /** Takes the toy off the matrix; it stays selected. */
+    public synchronized void hide() {
+        visibleUntil = Long.MIN_VALUE;
+    }
+
+    /** Deselects (e.g. toys switched off in Settings). */
+    public synchronized void deselect() {
+        select(null);
+        hide();
+    }
+
+    private void select(Toy t) {
+        if (t == selected) return;
+        Toy old = selected;
+        selected = t;
+        if (old != null) old.onDeselected();
+        if (t != null) t.onSelected();
     }
 
     private boolean isVisible(long now) {
-        Toy t = current();
-        if (t == null) return false;
-        return (visibleUntil != Long.MIN_VALUE && now < visibleUntil) || t.keepsScreenOn();
+        if (selected == null) return false;
+        return (visibleUntil != Long.MIN_VALUE && now < visibleUntil) || selected.keepsScreenOn();
     }
 
     @Override public int priority() { return PRIORITY_TOY; }
 
     @Override public synchronized boolean isActive(long now) {
-        syncShown(now);
         return isVisible(now);
     }
 
     @Override public synchronized long render(Frame f, long now) {
-        Toy t = current();
-        if (t == null) return -1;
-        t.render(f, now, context.get());
-        long interval = t.frameIntervalMs();
+        if (selected == null) return -1;
+        selected.render(f, now, context.get());
+        long interval = selected.frameIntervalMs();
         long untilIdle = visibleUntil - now;
         // Wake up for the idle timeout even when the picture is static.
-        if (!t.keepsScreenOn() && untilIdle > 0) {
+        if (!selected.keepsScreenOn() && untilIdle > 0) {
             return interval < 0 ? untilIdle : Math.min(interval, untilIdle);
         }
         return interval;

@@ -80,20 +80,31 @@ public final class HostTests {
 
         org.openglyph.toys.ToyHost host =
                 new org.openglyph.toys.ToyHost(() -> ctx, clock, battery, sw);
-        check(!host.isActive(0), "host hidden until the button is pressed");
+        check(!host.isActive(0) && host.selected() == null, "nothing selected or shown at first");
         host.onTap(100);
-        check(host.isActive(100) && host.current() == clock, "first tap shows the first toy");
+        check(host.isActive(100) && host.selected() == clock, "first press selects and shows the first toy");
         host.onTap(200);
-        check(host.current() == battery, "tap while visible moves to the next toy");
+        check(host.selected() == battery, "press while shown selects the next toy");
         check(!host.isActive(200 + org.openglyph.toys.ToyHost.IDLE_MS), "hides after the idle timeout");
+        check(host.selected() == battery, "hiding keeps the selection");
         host.onTap(20000);
-        check(host.current() == battery, "tap after hiding shows the same toy again");
-        host.setEnabled(java.util.Set.of("clock", "stopwatch"));
-        check(host.current() == clock, "disabling the current toy falls back to the first enabled");
-        host.onTap(20100);
+        check(host.selected() == battery && host.isActive(20000), "press after hiding shows the same toy again");
+        host.onTap(20050);
         host.onLongPress(20200);
-        check(host.current() == sw && sw.isRunning(), "long press reaches the current toy");
+        check(host.selected() == sw && sw.isRunning(), "long press reaches the selected toy");
         check(host.isActive(20200 + 60000), "running stopwatch keeps the toy on screen");
+        host.setEnabled(java.util.Set.of("clock", "battery"));
+        check(host.selected() == null, "disabling the selected toy deselects it");
+        sw.onLongPress(30000); // stop
+        sw.onLongPress(30000); // reset
+        host.setOrder(java.util.List.of("stopwatch", "nope", "clock"));
+        host.deselect();
+        host.onTap(40000);
+        check(host.selected() == clock, "reordering keeps the position on the same toy");
+        host.onTap(40100);
+        check(host.selected() == sw, "toy order from Manage toys is followed (unknown ids skipped)");
+        host.show("battery", 40200);
+        check(host.selected() == battery && host.isActive(40300), "Settings can show any toy");
         host.setEnabled(java.util.Set.of());
         host.onTap(90000);
         check(!host.isActive(90000), "no enabled toys: nothing shows");
@@ -102,53 +113,59 @@ public final class HostTests {
     static void remoteToys() {
         List<String> log = new ArrayList<>();
         org.openglyph.toys.RemoteToy.Listener l = new org.openglyph.toys.RemoteToy.Listener() {
-            @Override public void onShow(org.openglyph.toys.RemoteToy t) { log.add("show " + t.label()); }
-            @Override public void onHide(org.openglyph.toys.RemoteToy t) { log.add("hide " + t.label()); }
+            @Override public void onSelect(org.openglyph.toys.RemoteToy t) { log.add("bind " + t.label()); }
+            @Override public void onDeselect(org.openglyph.toys.RemoteToy t) { log.add("unbind " + t.label()); }
             @Override public void onEvent(org.openglyph.toys.RemoteToy t, String e) { log.add(e + " " + t.label()); }
         };
-        org.openglyph.toys.RemoteToy dice = new org.openglyph.toys.RemoteToy(
-                "com.example.Dice", "com.example.dice.DiceToy", "Dice", true, l);
+        org.openglyph.toys.RemoteToy timer = new org.openglyph.toys.RemoteToy(
+                "com.example.Timer", "com.example.timer.TimerToy", "Timer", "", true, true, l);
         org.openglyph.toys.RemoteToy noLong = new org.openglyph.toys.RemoteToy(
-                "org.other", "org.other.T", "Other", false, l);
-        check(dice.id().equals("nt_com.example.dice_dicetoy"), "remote toy id is settings-safe");
+                "org.other", "org.other.T", "Other", "", false, false, l);
+        check(timer.id().equals("nt_com.example.timer_timertoy"), "SDK toy id is settings-safe");
 
         org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
         org.openglyph.toys.Toys.Clock clock = new org.openglyph.toys.Toys.Clock();
         org.openglyph.toys.ToyHost host = new org.openglyph.toys.ToyHost(() -> ctx, clock);
-        host.setExtraToys(List.of(dice, noLong), 1);
+        host.setExtraToys(List.of(timer, noLong), 1);
         check(host.allToys().size() == 3, "SDK toys are added after the built-in ones");
 
         host.onTap(0);          // clock
-        host.onTap(100);        // dice
-        check(log.equals(List.of("show Dice")), "the SDK toy is bound when it comes on screen");
+        host.onTap(100);        // timer
+        check(log.equals(List.of("bind Timer")), "an SDK toy is bound when it is selected");
         Frame f = new Frame();
         host.render(f, 100);
-        check(f.isDark(), "nothing is drawn until the app sends a frame");
+        check(f.isDark(), "nothing is drawn until the toy sends a frame");
         int[] grid = new int[625];
         grid[12 * 25 + 12] = 4095;
-        dice.setFrame(grid);
+        timer.setFrame(grid);
         f.clear();
         host.render(f, 150);
-        check(f.get(12, 12) == 4095, "the app's frame is shown");
+        check(f.get(12, 12) == 4095, "the toy's frame is shown");
 
         host.onButtonDown(200);
         host.onLongPress(300);
         host.onButtonUp(310);
-        check(log.subList(1, 4).equals(List.of("action_down Dice", "change Dice", "action_up Dice")),
+        check(log.subList(1, 4).equals(List.of("action_down Timer", "change Timer", "action_up Timer")),
                 "button events reach the toy as action_down / change / action_up");
 
-        host.onTap(400);        // other
-        check(log.get(4).equals("hide Dice") && log.get(5).equals("show Other"),
-                "switching unbinds the old toy before binding the next");
+        check(!host.isActive(310 + org.openglyph.toys.ToyHost.IDLE_MS + 1) && log.size() == 4,
+                "the matrix times out but the toy stays bound (a timer keeps counting)");
+        timer.setNoTimeout(true);
+        check(host.isActive(999999), "setGlyphMatrixTimeout(false) keeps the toy on screen");
+        timer.setNoTimeout(false);
+
+        host.onTap(100000);     // shows timer again (hidden before: no advance)
+        host.onTap(100100);     // other
+        check(log.get(4).equals("unbind Timer") && log.get(5).equals("bind Other"),
+                "selecting another toy unbinds the old one first");
         int before = log.size();
-        host.onLongPress(500);
+        host.onLongPress(100200);
         check(log.size() == before, "no change event for a toy without long-press support");
 
-        check(!host.isActive(500 + org.openglyph.toys.ToyHost.IDLE_MS + 1)
-                && log.get(log.size() - 1).equals("hide Other"), "timing out unbinds the toy");
-
-        host.setExtraToys(List.of(), 1);
-        check(host.allToys().size() == 1, "uninstalled SDK toys disappear");
+        host.setExtraToys(List.of(timer), 1);
+        check(log.get(log.size() - 1).equals("unbind Other") && host.allToys().size() == 2,
+                "an uninstalled selected toy is unbound and removed");
+        check(timer.aodSupported() && !noLong.aodSupported(), "aod_support is kept");
     }
 
     static void nothingStyleFeatures() {
@@ -170,19 +187,73 @@ public final class HostTests {
                 "essential app set parses");
 
         // Always-on policy
-        check(AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, 14, 23, 7),
+        check(AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, false),
                 "ALWAYS shows with the screen off");
-        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, false, false, false, 14, 23, 7),
+        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, false, false, false, false),
                 "never while the screen is on");
-        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, 2, 23, 7),
-                "quiet period across midnight hides it");
-        check(AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, 7, 23, 7),
-                "quiet period ends at its end hour");
-        check(AodPolicy.shouldShow(AodPolicy.Mode.FACE_DOWN, true, true, false, 14, -1, -1)
-                && !AodPolicy.shouldShow(AodPolicy.Mode.FACE_DOWN, true, false, false, 14, -1, -1),
+        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, true),
+                "bedtime hides it");
+        check(AodPolicy.shouldShow(AodPolicy.Mode.FACE_DOWN, true, true, false, false)
+                && !AodPolicy.shouldShow(AodPolicy.Mode.FACE_DOWN, true, false, false, false),
                 "FACE_DOWN follows orientation");
-        check(AodPolicy.shouldShow(AodPolicy.Mode.CHARGING, true, false, true, 14, -1, -1),
+        check(AodPolicy.shouldShow(AodPolicy.Mode.CHARGING, true, false, true, false),
                 "CHARGING follows the charger");
+
+        // Bedtime schedule (Monday = 0)
+        int mon = 0, tue = 1, sun = 6;
+        check(Bedtime.isActive(23 * 60, 7 * 60, Bedtime.EVERY_DAY, tue, 2 * 60), "overnight bedtime after midnight");
+        check(!Bedtime.isActive(23 * 60, 7 * 60, Bedtime.EVERY_DAY, tue, 7 * 60), "bedtime ends at its end time");
+        check(Bedtime.isActive(23 * 60, 7 * 60, Bedtime.EVERY_DAY, tue, 23 * 60 + 30), "bedtime starts at its start time");
+        check(Bedtime.isActive(23 * 60, 7 * 60, 1 << sun, mon, 3 * 60)
+                && !Bedtime.isActive(23 * 60, 7 * 60, 1 << sun, mon, 23 * 60 + 30),
+                "an overnight bedtime belongs to the day it starts on");
+        check(Bedtime.isActive(13 * 60, 14 * 60, Bedtime.WEEKDAYS, tue, 13 * 60 + 5)
+                && !Bedtime.isActive(13 * 60, 14 * 60, Bedtime.WEEKDAYS, sun, 13 * 60 + 5), "daytime schedule on weekdays");
+        check(!Bedtime.isActive(600, 600, Bedtime.EVERY_DAY, mon, 600) && !Bedtime.isActive(1, 600, 0, mon, 300),
+                "empty schedule is never on");
+        check(Bedtime.minutesToNextChange(23 * 60, 7 * 60, 22 * 60 + 59) == 1
+                && Bedtime.minutesToNextChange(23 * 60, 7 * 60, 23 * 60) == 8 * 60, "next bedtime change");
+        check(Bedtime.dayIndex(java.util.Calendar.MONDAY) == 0 && Bedtime.dayIndex(java.util.Calendar.SUNDAY) == 6,
+                "calendar day mapping");
+
+        // Essential Notifications rules
+        EssentialRule rule = new EssentialRule();
+        rule.name = "Work | chat, \"urgent\"\n";
+        rule.apps.add("com.slack");
+        rule.people.add("Ayşe");
+        rule.keywords.add("help");
+        rule.keywords.add("acil, hemen");
+        rule.icon = "star";
+        EssentialRule open = new EssentialRule();
+        open.enabled = false;
+        java.util.List<EssentialRule> rules = EssentialRule.parse(EssentialRule.format(java.util.List.of(rule, open)));
+        check(rules.size() == 2 && rules.get(0).format().equals(rule.format()) && !rules.get(1).enabled
+                && rules.get(0).name.equals(rule.name) && rules.get(0).keywords.get(1).equals("acil, hemen"),
+                "rules round-trip with separators in their text");
+        EssentialRule.Notice fromAyse = new EssentialRule.Notice("com.slack", "#general",
+                "Can you HELP me?", java.util.List.of("Ayşe Yılmaz"));
+        check(rule.matches(fromAyse), "rule matches app + person + keyword");
+        check(!rule.matches(new EssentialRule.Notice("com.whatsapp", "Ayşe", "help", null)), "other app does not match");
+        check(!rule.matches(new EssentialRule.Notice("com.slack", "Bob", "help", java.util.List.of("Bob"))),
+                "other person does not match");
+        check(!rule.matches(new EssentialRule.Notice("com.slack", "Ayşe", "hello", null)), "missing keyword does not match");
+        check(rule.matches(new EssentialRule.Notice("com.slack", "Ayşe", "acil, hemen bak", null)),
+                "person found in the title");
+        EssentialRule any = new EssentialRule();
+        check(any.matches(new EssentialRule.Notice("x", null, null, null)) && !open.matches(fromAyse),
+                "empty rule matches everything, disabled rule nothing");
+        check(EssentialRule.firstMatch(java.util.List.of(open, rule, any), fromAyse) == rule, "first enabled match wins");
+
+        // Icons
+        for (String name : GlyphIcons.names()) {
+            int[] g = GlyphIcons.render(name, Frame.MAX);
+            Frame icon = new Frame();
+            icon.setGrid(g);
+            boolean inside = true;
+            for (int i = 0; i < g.length; i++) if (g[i] > 0 && !MatrixLayout.exists(i % 25, i / 25)) inside = false;
+            check(!icon.isDark() && inside, "icon " + name + " is drawn on real LEDs");
+        }
+        check(GlyphIcons.render("nope", 1) == null, "unknown icon");
         check(AodPolicy.isFaceDown(0.3f, -0.5f, -9.7f) && !AodPolicy.isFaceDown(0, 0, 9.8f)
                 && !AodPolicy.isFaceDown(6f, 0, -7f), "face-down detection");
         check(!AodPolicy.isFaceUp(0, 0, -6f) && AodPolicy.isFaceUp(0, 0, 2f), "face-up hysteresis");
@@ -199,10 +270,17 @@ public final class HostTests {
         for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) max = Math.max(max, f.get(x, y));
         check(max > 0 && max < Frame.MAX / 3, "always-on clock is dimmed");
         idle.setAlwaysOn(false);
-        idle.setEssential(true);
+        idle.setEssential(GlyphIcons.render("bell", Frame.MAX));
         f.clear();
         idle.render(f, 0);
-        check(idle.isActive(0) && f.get(12, 22) > 0 && f.get(12, 4) == 0, "essential dot alone");
+        check(idle.isActive(0) && f.get(12, 5) > 0 && f.get(12, 5) < Frame.MAX, "essential icon alone, dimmed");
+        idle.setAlwaysOn(true);
+        f.clear();
+        idle.render(f, 0);
+        check(f.get(12, 5) > 0, "essential icon replaces the always-on clock");
+        idle.setAlwaysOn(false);
+        idle.setEssential(null);
+        check(!idle.isActive(0), "idle layer off again");
         check(new Effects.NotificationPulse().priority() > idle.priority(), "notifications draw over idle");
     }
 

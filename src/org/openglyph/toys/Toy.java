@@ -25,10 +25,10 @@ public interface Toy {
 
     default void onButtonUp(long nowMs) {}
 
-    /** The toy appeared on / left the matrix (remote toys bind / unbind their service here). */
-    default void onShown() {}
+    /** Selected / deselected on the Glyph Button (SDK toys bind / unbind their service here). */
+    default void onSelected() {}
 
-    default void onHidden() {}
+    default void onDeselected() {}
 
     /** While true the host keeps the toy on screen past its idle timeout. */
     default boolean keepsScreenOn() {
