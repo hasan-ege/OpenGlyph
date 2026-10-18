@@ -161,4 +161,7 @@
     <string name="settings_generative_sounds_summary">Her uygulama, bu telefonun seed\'i ve uygulamadan üretilen kendi sesini alır. Yalnızca varsayılan seste olan kanallar değişir; kapatınca geri alınır</string>
     <string name="settings_generative_preview">Bir uygulamayı önizle</string>
     <string name="settings_generative_preview_summary">Uygulamanın sesini ve animasyonunu çalar</string>
+    <string name="settings_engine">Ses motoru</string>
+    <string name="engine_diode">Diode: kaleydoskop kıvılcımlar, keskin bip sesleri</string>
+    <string name="engine_chemical">Chemical: büyüyen bloblar, damla ve tel sesleri</string>
 </resources>

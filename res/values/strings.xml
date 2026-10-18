@@ -171,4 +171,7 @@
     <string name="settings_generative_sounds_summary">Each app gets its own sound, made from this phone\'s seed and the app. Only channels on the default sound are changed; switching off restores them</string>
     <string name="settings_generative_preview">Preview an app</string>
     <string name="settings_generative_preview_summary">Plays the app\'s sound and animation</string>
+    <string name="settings_engine">Sound engine</string>
+    <string name="engine_diode">Diode: kaleidoscopic sparks, crisp bleeps</string>
+    <string name="engine_chemical">Chemical: growing blobs, drips and plucks</string>
 </resources>

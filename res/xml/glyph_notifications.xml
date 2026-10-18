@@ -37,6 +37,15 @@
         android:key="generative"
         android:title="@string/settings_generative_category">
 
+        <ListPreference
+            android:key="open_glyph_engine"
+            android:title="@string/settings_engine"
+            android:entries="@array/engine_entries"
+            android:entryValues="@array/engine_values"
+            android:defaultValue="DIODE"
+            app:useSimpleSummaryProvider="true"
+            android:persistent="false" />
+
         <SwitchPreferenceCompat
             android:key="open_glyph_generative_sounds"
             android:title="@string/settings_generative_sounds"

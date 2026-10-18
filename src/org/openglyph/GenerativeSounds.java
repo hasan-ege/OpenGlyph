@@ -69,8 +69,16 @@ final class GenerativeSounds {
         return seed;
     }
 
+    Generative.Engine engine() {
+        return Generative.Engine.parse(GlyphSettings.string(mContext.getContentResolver(),
+                GlyphSettings.ENGINE, "DIODE"));
+    }
+
+    /** The app's theme from the current engine; the seed is this phone's seed + app name. */
     synchronized Generative.Theme theme(String pkg) {
-        return mThemes.computeIfAbsent(pkg, p -> Generative.theme(mSeed, p));
+        Generative.Engine engine = engine();
+        return mThemes.computeIfAbsent(engine + ":" + pkg,
+                k -> Generative.theme(mSeed, label(pkg), engine));
     }
 
     /** Plays an app's sound now (Settings preview). */
@@ -107,9 +115,11 @@ final class GenerativeSounds {
 
     /** The app's sound in MediaStore, written on first use. */
     synchronized Uri soundUri(String pkg) {
-        String saved = mPrefs.getString("uri:" + pkg, null);
+        String key = "uri:" + engine() + ":" + pkg;
+        String saved = mPrefs.getString(key, null);
         if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
-        String name = "OpenGlyph " + label(pkg).replaceAll("[\\\\/:*?\"<>|]", "_") + ".wav";
+        String name = "OpenGlyph " + label(pkg).replaceAll("[\\\\/:*?\"<>|]", "_") + " ("
+                + engine().name().toLowerCase(java.util.Locale.ROOT) + ").wav";
         ContentValues v = new ContentValues();
         v.put(MediaStore.Audio.Media.DISPLAY_NAME, name);
         v.put(MediaStore.Audio.Media.TITLE, label(pkg));
@@ -130,7 +140,7 @@ final class GenerativeSounds {
         ContentValues done = new ContentValues();
         done.put(MediaStore.Audio.Media.IS_PENDING, 0);
         cr.update(uri, done, null, null);
-        mPrefs.edit().putString("uri:" + pkg, uri.toString()).apply();
+        mPrefs.edit().putString(key, uri.toString()).apply();
         return uri;
     }
 
@@ -169,6 +179,7 @@ final class GenerativeSounds {
                 nm().updateNotificationChannelForPackage(pkg, ai.uid, ch);
                 changed.add(ch.getId());
             }
+            if (ours != null) mPrefs.edit().putString("applied:" + pkg, ours.toString()).apply();
             mPrefs.edit().putStringSet("channels:" + pkg, changed)
                     .putBoolean("done:" + pkg, !channels.isEmpty()).apply();
             if (ours != null) Log.i(TAG, "generative sound for " + pkg + " on " + changed.size() + " channels");
@@ -184,7 +195,7 @@ final class GenerativeSounds {
             String pkg = key.substring("channels:".length());
             try {
                 ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(pkg, 0);
-                String ours = mPrefs.getString("uri:" + pkg, "");
+                String ours = mPrefs.getString("applied:" + pkg, "");
                 Set<String> ids = mPrefs.getStringSet(key, Set.of());
                 @SuppressWarnings("unchecked")
                 List<NotificationChannel> channels =

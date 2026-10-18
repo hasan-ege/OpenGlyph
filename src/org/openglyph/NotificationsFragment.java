@@ -37,6 +37,13 @@ public final class NotificationsFragment extends GlyphFragment {
 
         link("app_patterns", AppPatternsFragment::new);
 
+        ListPreference engine = findPreference(GlyphSettings.ENGINE);
+        engine.setValue(GlyphSettings.string(cr, GlyphSettings.ENGINE, "DIODE"));
+        engine.setOnPreferenceChangeListener((p, value) -> {
+            Settings.Secure.putString(cr, GlyphSettings.ENGINE, (String) value);
+            return true;
+        });
+
         androidx.preference.TwoStatePreference sounds = findPreference(GlyphSettings.GEN_SOUNDS);
         sounds.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.GEN_SOUNDS));
         sounds.setOnPreferenceChangeListener((p, value) -> {

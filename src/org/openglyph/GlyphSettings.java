@@ -43,11 +43,12 @@ final class GlyphSettings {
     static final String MUSIC = "open_glyph_music";                  // 1/0, default 0
     static final String GEN_SOUNDS = "open_glyph_generative_sounds"; // 1/0, default 0
     static final String SEED = "open_glyph_seed";                    // hex, random per device
+    static final String ENGINE = "open_glyph_engine";                // DIODE|CHEMICAL
 
     static final String[] ALL = {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
-        APP_PATTERNS, DEFAULT_PATTERN, AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS,
+        APP_PATTERNS, DEFAULT_PATTERN, AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, ENGINE,
     };
 
     private GlyphSettings() {}

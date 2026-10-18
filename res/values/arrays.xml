@@ -50,4 +50,12 @@
     <string-array name="day_short_names">
         <item>Mon</item><item>Tue</item><item>Wed</item><item>Thu</item><item>Fri</item><item>Sat</item><item>Sun</item>
     </string-array>
+    <string-array name="engine_entries">
+        <item>@string/engine_diode</item>
+        <item>@string/engine_chemical</item>
+    </string-array>
+    <string-array name="engine_values" translatable="false">
+        <item>DIODE</item>
+        <item>CHEMICAL</item>
+    </string-array>
 </resources>

@@ -346,36 +346,74 @@ public final class HostTests {
 
     static void generative() {
         long seedA = 0x1234_5678_9abcL, seedB = 0x0fed_cba9_8765L;
-        Generative.Theme wa = Generative.theme(seedA, "com.whatsapp");
-        Generative.Theme wa2 = Generative.theme(seedA, "com.whatsapp");
-        Generative.Theme tg = Generative.theme(seedA, "org.telegram.messenger");
-        Generative.Theme waB = Generative.theme(seedB, "com.whatsapp");
-        check(java.util.Arrays.equals(wa.notesMidi, wa2.notesMidi) && wa.motif == wa2.motif
-                && java.util.Arrays.equals(wa.synth(22050), wa2.synth(22050)), "same device + app: same sound and light");
-        check(!java.util.Arrays.equals(wa.synth(8000), tg.synth(8000)), "another app sounds different");
-        check(!java.util.Arrays.equals(wa.synth(8000), waB.synth(8000)), "another device sounds different");
-        java.util.Set<Integer> motifs = new java.util.HashSet<>();
-        for (int i = 0; i < 200; i++) motifs.add(Generative.theme(seedA, "app" + i).motif);
-        check(motifs.size() == Generative.MOTIFS, "all motifs are used: " + motifs);
-        for (int i = 0; i < 40; i++) {
-            Generative.Theme th = Generative.theme(seedB, "pkg." + i);
-            short[] pcm = th.synth(44100);
-            int peak = 0;
-            for (short v : pcm) peak = Math.max(peak, Math.abs(v));
-            check(pcm.length > 44100 / 2 && pcm.length < 44100 * 2 && peak > 15000 && peak < 32767,
-                    "sound " + i + " is 0.5-2 s and not clipped (peak " + peak + ")");
-            Frame f = new Frame();
-            th.render(f, 60);
-            Frame later = new Frame();
-            th.render(later, th.durationMs() + 10);
-            check(!f.isDark() && later.isDark(), "animation " + i + " (motif " + th.motif + ") lights up, then ends");
+        for (Generative.Engine eng : Generative.Engine.values()) {
+            Generative.Theme wa = Generative.theme(seedA, "WhatsApp", eng);
+            Generative.Theme wa2 = Generative.theme(seedA, "WhatsApp", eng);
+            Generative.Theme tg = Generative.theme(seedA, "Telegram", eng);
+            Generative.Theme waB = Generative.theme(seedB, "WhatsApp", eng);
+            check(java.util.Arrays.equals(wa.synth(22050), wa2.synth(22050)) && frameAt(wa, 400).equals(frameAt(wa2, 400)),
+                    eng + ": same device + app name, same sound and light");
+            check(!java.util.Arrays.equals(wa.synth(8000), tg.synth(8000)) && !frameAt(wa, 400).equals(frameAt(tg, 400)),
+                    eng + ": another app differs");
+            check(!java.util.Arrays.equals(wa.synth(8000), waB.synth(8000)), eng + ": another device differs");
+            // Visibly different: compare lit pixels over the whole animation between apps.
+            int differentPairs = 0, pairs = 0;
+            java.util.List<Generative.Theme> themes = new ArrayList<>();
+            for (int i = 0; i < 8; i++) themes.add(Generative.theme(seedA, "App " + i, eng));
+            for (int a = 0; a < themes.size(); a++) {
+                for (int b = a + 1; b < themes.size(); b++) {
+                    pairs++;
+                    if (litOverlap(themes.get(a), themes.get(b)) < 0.5) differentPairs++;
+                }
+            }
+            check(differentPairs >= pairs * 0.8, eng + ": apps look clearly different (" + differentPairs + "/" + pairs + ")");
+            for (int i = 0; i < 20; i++) {
+                Generative.Theme th = Generative.theme(seedB, "pkg." + i, eng);
+                short[] pcm = th.synth(44100);
+                int peak = 0;
+                for (short v : pcm) peak = Math.max(peak, Math.abs(v));
+                long lit = 0;
+                for (long t = 0; t < th.durationMs(); t += 100) {
+                    Frame f = new Frame();
+                    th.render(f, t);
+                    for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) if (f.get(x, y) > 0) lit++;
+                }
+                Frame after = new Frame();
+                th.render(after, th.durationMs() + 50);
+                check(pcm.length > 44100 && pcm.length < 44100 * 3 && peak > 15000 && peak < 32767
+                        && lit > 30 && after.isDark(), eng + " theme " + i + ": 1-3 s of sound, light, then dark");
+            }
         }
+        // Diode is symmetric
+        Generative.Theme d = null;
+        for (int i = 0; d == null; i++) {
+            Generative.Theme t = Generative.theme(seedA, "s" + i, Generative.Engine.DIODE);
+            if (t.symmetry == 1) d = t;
+        }
+        Frame df = new Frame();
+        d.render(df, d.hits.get(0).timeMs + 40);
+        boolean sym = true;
+        for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) if (df.get(x, y) != df.get(24 - x, y) || df.get(x, y) != df.get(x, 24 - y)) sym = false;
+        check(sym && !df.isDark(), "diode: mirror-xy symmetry");
+        Generative.Theme c = null;
+        for (int i = 0; c == null; i++) {
+            Generative.Theme t = Generative.theme(seedA, "c" + i, Generative.Engine.CHEMICAL);
+            if (t.symmetry == 0) c = t;
+        }
+        Frame cf = new Frame();
+        c.render(cf, 800);
+        boolean mirror = true;
+        for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) if (cf.get(x, y) != cf.get(24 - x, y)) mirror = false;
+        check(mirror && !cf.isDark(), "chemical: left-right mirrored blobs");
+        System.out.println("\nChemical Gmail at 800 ms:\n" + cf.toAscii());
+
         byte[] wav = Generative.wav(new short[] {1, -1}, 44100);
         check(wav.length == 48 && wav[0] == 'R' && wav[8] == 'W' && wav[40] == 4, "WAV header");
+        Generative.Theme wa = Generative.theme(seedA, "WhatsApp", Generative.Engine.DIODE);
         Effects.NotificationPulse pulse = new Effects.NotificationPulse();
         pulse.trigger(0, wa);
         check(pulse.isActive(wa.durationMs() - 1) && !pulse.isActive(wa.durationMs() + 1),
-                "generative pulse lasts as long as its melody");
+                "generative pulse lasts as long as its sound");
         Effects.AudioBars bars = new Effects.AudioBars();
         float[] lv = new float[25];
         for (int i = 0; i < 25; i++) lv[i] = i / 24f;
@@ -384,10 +422,33 @@ public final class HostTests {
         bars.render(bf, 10);
         check(bars.isActive(100) && !bars.isActive(1000) && bf.get(12, 12) > 0 && bf.get(24, 12) > 0
                 && bf.get(0, 13) == 0 && bf.get(22, 7) > 0, "music bars: per-column height, quiet when stale");
-        System.out.println("\nMusic bars:\n" + bf.toAscii());
-        Frame g = new Frame();
-        wa.render(g, wa.onsetsMs[1] + 120);
-        System.out.println("Generative com.whatsapp (motif " + wa.motif + "):\n" + g.toAscii());
+    }
+
+    static String frameAt(Generative.Theme t, long ms) {
+        Frame f = new Frame();
+        t.render(f, ms);
+        return f.toAscii();
+    }
+
+    /** Mean, over the animation, of the per-frame Jaccard overlap of lit pixels. */
+    static double litOverlap(Generative.Theme a, Generative.Theme b) {
+        double sum = 0;
+        int frames = 0;
+        for (long t = 100; t < 1400; t += 66) {
+            Frame fa = new Frame(), fb = new Frame();
+            a.render(fa, t);
+            b.render(fb, t);
+            int inter = 0, union = 0;
+            for (int k = 0; k < 625; k++) {
+                boolean x = fa.get(k % 25, k / 25) > 0, y = fb.get(k % 25, k / 25) > 0;
+                if (x && y) inter++;
+                if (x || y) union++;
+            }
+            if (union == 0) continue;
+            sum += inter / (double) union;
+            frames++;
+        }
+        return frames == 0 ? 1 : sum / frames;
     }
 
     static void timerLed() throws Exception {
