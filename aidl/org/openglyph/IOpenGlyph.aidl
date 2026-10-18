@@ -34,4 +34,10 @@ interface IOpenGlyph {
 
     /** setGlyphMatrixTimeout() from an SDK toy: false keeps the toy on the matrix. */
     void setPackageTimeout(String pkg, boolean timeout);
+
+    /**
+     * A toy frame (the SDK's setMatrixFrame) from OpenGlyphCompat: shown only while one of the
+     * package's toys is selected; frames that arrive after it was deselected are dropped.
+     */
+    void showToyFrame(String pkg, in int[] grid);
 }

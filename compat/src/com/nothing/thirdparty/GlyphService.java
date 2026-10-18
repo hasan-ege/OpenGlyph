@@ -39,6 +39,7 @@ public final class GlyphService extends Service {
      * right after binding, often once only, so it must not be lost while we connect.
      */
     private final Map<String, int[]> mPending = new LinkedHashMap<>();
+    private final Set<String> mPendingApp = new HashSet<>();
     private final Map<String, Boolean> mPendingTimeout = new LinkedHashMap<>();
 
     @Override
@@ -86,9 +87,12 @@ public final class GlyphService extends Service {
             IOpenGlyph og = IOpenGlyph.Stub.asInterface(service);
             Map<String, int[]> frames;
             Map<String, Boolean> timeouts;
+            Set<String> apps;
             synchronized (mPending) {
                 mOpenGlyph = og;
                 frames = new LinkedHashMap<>(mPending);
+                apps = new HashSet<>(mPendingApp);
+                mPendingApp.clear();
                 timeouts = new LinkedHashMap<>(mPendingTimeout);
                 mPending.clear();
                 mPendingTimeout.clear();
@@ -98,7 +102,8 @@ public final class GlyphService extends Service {
                     og.setPackageTimeout(e.getKey(), e.getValue());
                 }
                 for (Map.Entry<String, int[]> e : frames.entrySet()) {
-                    og.showPackageFrame(e.getKey(), e.getValue());
+                    if (apps.contains(e.getKey())) og.showPackageFrame(e.getKey(), e.getValue());
+                    else og.showToyFrame(e.getKey(), e.getValue());
                 }
                 if (!frames.isEmpty()) Log.i(TAG, "delivered " + frames.size() + " frame(s) held while connecting");
             } catch (RemoteException e) {
@@ -142,6 +147,7 @@ public final class GlyphService extends Service {
                 og = mOpenGlyph;
                 if (og == null) {
                     mPending.put(pkg, grid); // delivered by onServiceConnected
+                    if (app) mPendingApp.add(pkg); else mPendingApp.remove(pkg);
                     connect();
                     return;
                 }
@@ -149,7 +155,7 @@ public final class GlyphService extends Service {
         }
         final long id = Binder.clearCallingIdentity(); // call OpenGlyph as ourselves
         try {
-            og.showPackageFrame(pkg, grid);
+            if (app) og.showPackageFrame(pkg, grid); else og.showToyFrame(pkg, grid);
         } catch (RemoteException e) {
             mOpenGlyph = null;
         } finally {

@@ -314,6 +314,14 @@ public final class GlyphService extends Service {
         mRenderer.invalidate();
     }
 
+    /** A toy frame: drawn into the package's selected toy, dropped once it is deselected. */
+    private void showToyFrame(String pkg, int[] grid) {
+        RemoteToy toy = mToyBridge.boundToyOf(pkg);
+        if (toy == null) return; // a deselected toy still finishing its animation
+        toy.setFrame(grid);
+        mRenderer.invalidate();
+    }
+
     private void clearPackageFrame(String pkg) {
         IBinder token;
         synchronized (mPackageTokens) {
@@ -495,6 +503,16 @@ public final class GlyphService extends Service {
                         + MatrixLayout.GRID_SIZE + " pixels");
             }
             GlyphService.this.showPackageFrame(pkg, grid);
+        }
+
+        @Override
+        public void showToyFrame(String pkg, int[] grid) {
+            enforceCallingPermission(PERMISSION, "showToyFrame");
+            if (pkg == null || grid == null || grid.length != MatrixLayout.GRID_SIZE) {
+                throw new IllegalArgumentException("need a package and "
+                        + MatrixLayout.GRID_SIZE + " pixels");
+            }
+            GlyphService.this.showToyFrame(pkg, grid);
         }
 
         @Override
