@@ -44,6 +44,13 @@ public final class NotificationsFragment extends GlyphFragment {
             return true;
         });
 
+        androidx.preference.Preference seed = findPreference("device_seed");
+        seed.setSummary(GenerativeSounds.deviceSeed(cr));
+        seed.setOnPreferenceClickListener(p -> {
+            editSeed(seed);
+            return true;
+        });
+
         androidx.preference.TwoStatePreference sounds = findPreference(GlyphSettings.GEN_SOUNDS);
         sounds.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.GEN_SOUNDS));
         sounds.setOnPreferenceChangeListener((p, value) -> {
@@ -71,5 +78,35 @@ public final class NotificationsFragment extends GlyphFragment {
             if (running != null) running.testPulse();
             return true;
         });
+    }
+
+    /** Edit the device seed by hand, or roll a new one; every app's sound and light change. */
+    private void editSeed(androidx.preference.Preference pref) {
+        ContentResolver cr = cr();
+        android.content.Context c = requireContext();
+        android.widget.EditText input = new android.widget.EditText(c);
+        input.setSingleLine();
+        input.setText(GenerativeSounds.deviceSeed(cr));
+        input.setSelectAllOnFocus(true);
+        int pad = getResources().getDimensionPixelSize(R.dimen.og_tile_gap) * 4;
+        android.widget.FrameLayout box = new android.widget.FrameLayout(c);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(input);
+        new android.app.AlertDialog.Builder(c)
+                .setTitle(R.string.settings_seed)
+                .setMessage(R.string.settings_seed_message)
+                .setView(box)
+                .setPositiveButton(R.string.settings_seed_save, (d, w) -> {
+                    String v = input.getText().toString().trim();
+                    if (!v.isEmpty()) Settings.Secure.putString(cr, GlyphSettings.SEED, v);
+                    pref.setSummary(GenerativeSounds.deviceSeed(cr));
+                })
+                .setNeutralButton(R.string.settings_seed_reroll, (d, w) -> {
+                    pref.setSummary(GenerativeSounds.reroll(cr));
+                    GlyphService running = GlyphService.get();
+                    if (running != null) running.previewGenerative("com.android.settings");
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 }

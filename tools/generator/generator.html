@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Glyph Generator</title>
+<style>
+:root{--bg:#f2efe9;--fg:#141414;--muted:#6d6d6d;--card:#fff;--line:#ddd;--accent:#d71921}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e0e0e;--fg:#eee;--muted:#8d8d8d;--card:#191919;--line:#2a2a2a}}
+:root[data-theme="dark"]{--bg:#0e0e0e;--fg:#eee;--muted:#8d8d8d;--card:#191919;--line:#2a2a2a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px}
+@media (max-width:760px){main{grid-template-columns:1fr}}
+h1{grid-column:1/-1;font-size:20px;margin:0}
+.stage{background:var(--card);border-radius:28px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:12px}
+canvas#m{width:100%;max-width:440px;aspect-ratio:1}
+canvas#scope{width:100%;max-width:440px;height:56px}
+.panel{background:var(--card);border-radius:28px;padding:18px;display:flex;flex-direction:column;gap:14px}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
+input[type=text],select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit}
+.row{display:flex;gap:8px;align-items:center}
+button{border:0;border-radius:999px;padding:10px 16px;font:inherit;cursor:pointer;background:var(--line);color:inherit}
+button.primary{background:var(--accent);color:#fff;font-weight:600;flex:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{padding:6px 12px;font-size:13px}
+.meta{font:12px/1.5 ui-monospace,monospace;color:var(--muted);word-break:break-all}
+summary{cursor:pointer;font-weight:600;margin-bottom:8px}
+.sl{display:grid;grid-template-columns:1fr auto;gap:2px 8px;margin:8px 0}
+.sl span{font-size:13px}.sl output{font:12px ui-monospace,monospace;color:var(--muted)}
+.sl input{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+<h1>Glyph Generator</h1>
+<section class="stage">
+  <canvas id="m" width="880" height="880" aria-label="Glyph Matrix"></canvas>
+  <canvas id="scope" width="880" height="112" aria-hidden="true"></canvas>
+</section>
+<section class="panel">
+  <div><label for="name">Uygulama adı</label><input id="name" type="text" value="WhatsApp"></div>
+  <div class="chips" id="chips"></div>
+  <div><label for="seed">Cihaz seed'i</label>
+    <div class="row"><input id="seed" type="text" value="5eed1234abcd"><button id="rnd" title="Rastgele seed">🎲</button></div></div>
+  <div><label for="engine">Motor</label>
+    <select id="engine"><option value="diode">Diode</option><option value="chemical">Chemical</option></select></div>
+  <div class="row"><button class="primary" id="play">▶ Çal</button><label style="margin:0;text-transform:none;letter-spacing:0"><input type="checkbox" id="loop"> Tekrarla</label></div>
+  <div class="row"><button id="wav">WAV indir</button></div>
+  <div class="meta" id="meta"></div>
+  <details open id="tune"><summary>Ses ayarları</summary>
+    <div id="sliders"></div>
+    <div class="row" style="margin-top:10px"><button id="copy">Ayarları kopyala</button><button id="reset">Varsayılan</button></div>
+    <textarea id="json" rows="6" readonly style="width:100%;margin-top:8px;font:11px ui-monospace,monospace;border-radius:12px;border:1px solid var(--line);background:transparent;color:inherit;padding:8px" aria-label="Ayarlar (JSON)"></textarea>
+  </details>
+</section>
+</main>
+<script>
+"use strict";
+// ---------- deterministic integer PRNG (ported 1:1 to Java later) ----------
+function hashStr(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19;}
+  h=Math.imul(h^(h>>>16),2246822507);h=Math.imul(h^(h>>>13),3266489909);return (h^(h>>>16))>>>0;}
+function rng(seed){let a=seed|0;return function(){a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};}
+const pick=(r,arr)=>arr[Math.floor(r()*arr.length)];
+const rint=(r,a,b)=>a+Math.floor(r()*(b-a+1));
+
+// ---------- matrix geometry ----------
+const ROWS=[7,11,15,17,19,21,21,23,23,25,25,25,25,25,25,25,23,23,21,21,19,17,15,11,7];
+const EXISTS=new Uint8Array(625);for(let y=0;y<25;y++){const s=(25-ROWS[y])>>1;for(let x=s;x<s+ROWS[y];x++)EXISTS[y*25+x]=1;}
+const FRAME_MS=33, SR=44100;
+
+// ---------- DIODE ----------
+// Circuit-like parts (bars, blocks, dot pairs) in one quadrant, mirrored on X and Y
+// (sometimes also on the diagonal), flashed for 2-5 frames on each hit, dark between.
+function diodePart(r){
+  const k=r();
+  if(k<0.30) return {t:'h',len:rint(r,2,6)};
+  if(k<0.50) return {t:'v',len:rint(r,2,5)};
+  if(k<0.65) return {t:'b',w:rint(r,2,3),h:2};
+  if(k<0.80) return {t:'pair',gap:rint(r,1,2)};
+  return {t:'dot'};
+}
+function diodeConfig(r){
+  const parts=[], n=rint(r,2,5);
+  for(let i=0;i<n;i++){
+    const p=diodePart(r);
+    // Positions favour the centre rows/columns, a middle ring and the rim, like the reference.
+    const zone=r();
+    if(zone<0.35){p.x=rint(r,0,9);p.y=rint(r,1,3);}            // near the horizontal axis
+    else if(zone<0.55){p.x=rint(r,1,3);p.y=rint(r,0,9);}       // near the vertical axis
+    else if(zone<0.8){const a=r()*Math.PI/2,R=4+r()*5;p.x=Math.round(R*Math.cos(a));p.y=Math.round(R*Math.sin(a));}
+    else {const a=r()*Math.PI/2,R=10+r()*2;p.x=Math.round(R*Math.cos(a));p.y=Math.round(R*Math.sin(a));}
+    parts.push(p);
+  }
+  return {parts,grow:r()<0.6,diag:r()<0.25};
+}
+function drawDiodeConfig(g,cfg,phase,level){ // phase 0..1 within the flash
+  const put=(dx,dy)=>{const pts=[[dx,dy],[-dx,dy],[dx,-dy],[-dx,-dy]];
+    if(cfg.diag)pts.push([dy,dx],[-dy,dx],[dy,-dx],[-dy,-dx]);
+    for(const [x,y] of pts){const gx=12+x,gy=12+y;if(gx>=0&&gx<25&&gy>=0&&gy<25&&EXISTS[gy*25+gx])g[gy*25+gx]=Math.max(g[gy*25+gx],level);}};
+  for(const p of cfg.parts){
+    const L=cfg.grow?Math.max(1,Math.ceil((p.len||1)*Math.min(1,phase*2.2))):(p.len||1);
+    if(p.t==='h')for(let i=0;i<L;i++)put(p.x+i,p.y);
+    else if(p.t==='v')for(let i=0;i<L;i++)put(p.x,p.y+i);
+    else if(p.t==='b'){for(let i=0;i<p.w;i++)for(let j=0;j<p.h;j++)put(p.x+i,p.y+j);}
+    else if(p.t==='pair'){put(p.x,p.y);put(p.x+p.gap+1,p.y);}
+    else put(p.x,p.y);
+  }
+}
+
+// ---------- CHEMICAL ----------
+// Organic noise texture; the sound's envelope sets how much of it lights, so each swell
+// opens it up and it closes again, while the texture flows.
+// 3D gradient noise (Perlin-style) on an integer hash, so Java gives the same numbers.
+function ihash(x,y,z,s){let h=Math.imul(x,374761393)^Math.imul(y,668265263)^Math.imul(z,1274126177)^s;
+  h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;}
+const G3=[[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+function noise3(x,y,z,s){const xi=Math.floor(x),yi=Math.floor(y),zi=Math.floor(z),xf=x-xi,yf=y-yi,zf=z-zi;
+  const fade=t=>t*t*t*(t*(t*6-15)+10), u=fade(xf),v=fade(yf),w=fade(zf);
+  const g=(i,j,k)=>{const d=G3[ihash(xi+i,yi+j,zi+k,s)%12];return d[0]*(xf-i)+d[1]*(yf-j)+d[2]*(zf-k);};
+  const l=(a,b,t)=>a+(b-a)*t;
+  return l(l(l(g(0,0,0),g(1,0,0),u),l(g(0,1,0),g(1,1,0),u),v),l(l(g(0,0,1),g(1,0,1),u),l(g(0,1,1),g(1,1,1),u),v),w);}
+// Organic texture: thin worms with holes (ridges of the noise) or round cells (its peaks),
+// four-fold rotational symmetry blended with a little asymmetry, flowing over time.
+function chemField(r){
+  const s=Math.floor(r()*1e9)|0, ridge=r()<0.3, scale=ridge?0.12+r()*0.05:0.18+r()*0.1, sym=0.6+r()*0.3, diag=r()<0.4;
+  const oct2=0.35+r()*0.3;
+  const raw=(x,y,z)=>noise3(x*scale,y*scale,z,s)+oct2*noise3(x*scale*2.1,y*scale*2.1,z*1.7,s^0x5bd1e995);
+  return {ridge,value(x,y,z){const px=x-12,py=y-12;
+    let a=(raw(px,py,z)+raw(-py,px,z)+raw(-px,-py,z)+raw(py,-px,z))/4;
+    if(diag)a=(a+(raw(py,px,z)+raw(-px,py,z)+raw(-py,-px,z)+raw(px,-py,z))/4)/2;
+    const n=sym*a+(1-sym)*raw(px,py,z+7.3);
+    return ridge?1-Math.abs(n)*2:n;}};
+}
+// ---------- the score: one list of hits drives sound and light ----------
+// ---------- tunable settings (the panel edits these; "Ayarları kopyala" exports them) ----------
+const DEFAULTS={
+  // Tuned by ear (2026-10-18).
+  diode:{stepMin:40,stepMax:110,phrases:2,notesMax:5,gapMax:3,pitchLow:1580,pitchHigh:1710,
+    bip:1,bop:0.7,blip:0.4,click:0.1,zap:0.1,toneLen:30,shape:0.15,bopDrop:1.25,vibrato:0.4,
+    crush:0.1,reverb:0.06,volume:0.7},
+  chemical:{hitsMin:2,hitsMax:5,spacingMin:100,spacingMax:250,fizz:0,fizzTone:800,fizzWidth:0,
+    grain:0.35,bubbles:0.75,bubbleRate:16,bubbleLow:100,bubbleHigh:6000,gloop:0,thump:0.25,
+    swellAttack:70,swellRelease:150,reverb:0.12,volume:0.85},
+};
+let CFG=JSON.parse(JSON.stringify(DEFAULTS));
+try{const saved=JSON.parse(localStorage.getItem('glyphGenCfg2')||'null');
+  if(saved)for(const e of ['diode','chemical'])Object.assign(CFG[e],saved[e]||{});}catch(e){}
+
+const SCALES=[[0,2,4,7,9],[0,3,5,7,10],[0,2,4,6,9],[0,2,3,7,8],[0,4,7,9,11],[0,5,7,10,12]];
+function snapToScale(r,low,high){ // the notes of a seeded scale inside [low, high]
+  const scale=pick(r,SCALES), root=low*Math.pow(2,rint(r,0,11)/12), out=[];
+  for(let oct=-1;oct<5;oct++)for(const st of scale){const f=root*Math.pow(2,oct+st/12);if(f>=low&&f<=high)out.push(f);}
+  return out.length?out:[low];
+}
+function weighted(r,pairs){let tot=0;for(const [,w] of pairs)tot+=Math.max(0,w);
+  let x=r()*tot;for(const [k,w] of pairs){x-=Math.max(0,w);if(x<=0)return k;}return pairs[0][0];}
+
+function build(seedText,name,engine){
+  const r=rng(hashStr(seedText+'|'+name+'|'+engine));
+  const hits=[];
+  if(engine==='diode'){
+    const c=CFG.diode;
+    const step=rint(r,Math.min(c.stepMin,c.stepMax),Math.max(c.stepMin,c.stepMax)), pool=[], nCfg=rint(r,3,5);
+    for(let i=0;i<nCfg;i++)pool.push(diodeConfig(r));
+    // Every light pattern has its own voice, so a pattern always sounds the same.
+    const notes=snapToScale(r,Math.min(c.pitchLow,c.pitchHigh),Math.max(c.pitchLow,c.pitchHigh));
+    const voices=pool.map(()=>weighted(r,[['bip',c.bip],['bop',c.bop],['blip',c.blip],['click',c.click],['zap',c.zap]]));
+    const melody=[];let idx=rint(r,0,notes.length-1);
+    for(let i=0;i<16;i++){melody.push(notes[idx]);idx=Math.max(0,Math.min(notes.length-1,idx+rint(r,-2,2)));}
+    const order=[];for(let i=0;i<8;i++)order.push(rint(r,0,nCfg-1));
+    let s=0,k=0;
+    for(let p=0;p<Math.max(1,Math.round(c.phrases));p++){
+      const len=rint(r,2,Math.max(2,Math.round(c.notesMax)));
+      for(let i=0;i<len;i++){const cfg=order[(p+i)%order.length];
+        hits.push({t:s*step,cfg,voice:voices[cfg],f:melody[k++%melody.length],vel:i===0?1:0.65+0.3*r(),hold:rint(r,2,4),seed:Math.floor(r()*1e9)});
+        s+=r()<0.25?2:1;}
+      s+=rint(r,1,Math.max(1,Math.round(c.gapMax)));
+    }
+    return {engine,hits,pool,duration:s*step+500,cfg:c};
+  } else {
+    const c=CFG.chemical;
+    const field=chemField(r);
+    let t=0;const n=rint(r,Math.min(c.hitsMin,c.hitsMax),Math.max(c.hitsMin,c.hitsMax));
+    for(let i=0;i<n;i++){hits.push({t,vel:i===0?1:0.55+0.45*r(),voice:weighted(r,[['gloop',c.gloop],['thump',c.thump],['none',Math.max(0,1-c.gloop-c.thump)]]),seed:Math.floor(r()*1e9)});
+      t+=rint(r,Math.min(c.spacingMin,c.spacingMax),Math.max(c.spacingMin,c.spacingMax));}
+    const score={engine,hits,field,duration:t+700,cfg:c,bubbleSeed:Math.floor(r()*1e9),
+      bubbleNotes:snapToScale(r,Math.min(c.bubbleLow,c.bubbleHigh),Math.max(c.bubbleLow,c.bubbleHigh))};
+    // Swell envelope shared by the light and the fizz.
+    score.env=tm=>{let e=0;for(const h of hits){const a=tm-h.t;if(a<0)continue;
+      e+=h.vel*(a<c.swellAttack?a/c.swellAttack:Math.exp(-(a-c.swellAttack)/c.swellRelease));}return Math.min(1,e);};
+    return score;
+  }
+}
+
+// ---------- sound ----------
+function osc(ph,shape){ // sine morphing into square
+  const sn=Math.sin(2*Math.PI*ph);
+  if(shape<=0)return sn;
+  const sq=Math.tanh(sn*(1+shape*12))/Math.tanh(1+shape*12);
+  return sn*(1-shape)+sq*shape;
+}
+function diodeVoice(h,c){
+  const len=c.toneLen/1000, n=Math.floor((len+0.06)*SR), o=new Float32Array(n), nr=rng(h.seed);
+  let ph=0,y1=0,y2=0;
+  for(let i=0;i<n;i++){const t=i/SR,u=Math.min(1,t/len);let v=0;
+    const vib=1+c.vibrato*0.03*Math.sin(2*Math.PI*7*t);
+    switch(h.voice){
+      case 'bip':{ph+=h.f*vib/SR;const env=t<0.004?t/0.004:(t<len?1-0.3*u:Math.exp(-(t-len)/0.008)*0.7);v=osc(ph,c.shape)*env*0.5;break;}
+      case 'bop':{const f=h.f*0.5*Math.pow(2,-c.bopDrop*u);ph+=f*vib/SR;const env=t<0.004?t/0.004:(t<len?1:Math.exp(-(t-len)/0.012));v=osc(ph,c.shape*0.7)*env*0.6;break;}
+      case 'blip':{ph+=h.f*2/SR;v=osc(ph,c.shape)*Math.exp(-t/0.012)*0.45;break;}
+      case 'click':{const x=i<SR*0.003?(nr()*2-1):0;const w=2*Math.PI*Math.min(h.f*3,SR*0.45)/SR,R=0.95;const y=x+2*R*Math.cos(w)*y1-R*R*y2;y2=y1;y1=y;v=y*0.3*Math.exp(-t/0.01);break;}
+      case 'zap':{ph+=h.f*2*Math.pow(0.1,u)/SR;v=Math.sin(2*Math.PI*ph)*Math.exp(-t/len)*0.5;break;}
+    }
+    o[i]=v*h.vel;}
+  return o;
+}
+function chemVoice(h){
+  const len=0.25, n=Math.floor(len*SR), o=new Float32Array(n), nr=rng(h.seed);let ph=0,y1=0,y2=0;
+  for(let i=0;i<n;i++){const t=i/SR;let v=0;
+    if(h.voice==='gloop'){const f=180+260*Math.sin(Math.PI*Math.min(1,t/0.2));const w=2*Math.PI*f/SR,R=0.99;const x=(nr()*2-1)*0.2;const y=x+2*R*Math.cos(w)*y1-R*R*y2;y2=y1;y1=y;v=y*0.04*Math.sin(Math.PI*Math.min(1,t/0.22));}
+    else if(h.voice==='thump'){ph+=(55+40*Math.exp(-t/0.02))/SR;v=Math.sin(2*Math.PI*ph)*0.7*Math.exp(-t/0.08);}
+    o[i]=v*h.vel;}
+  return o;
+}
+// Continuous fizz: noise through a resonant band, broken into grains, riding the swells; plus
+// rising bubbles sprinkled at a rate that follows the swell.
+function chemFizz(score,n){
+  const c=score.cfg, out=new Float32Array(n), nr=rng(score.bubbleSeed);
+  const w=2*Math.PI*Math.min(c.fizzTone,SR*0.45)/SR, R=0.80+0.19*(1-c.fizzWidth);
+  let y1=0,y2=0,hp=0,grainEnv=1,grainLeft=0;
+  for(let i=0;i<n;i++){const tm=i/SR*1000, e=score.env(tm);
+    const x=nr()*2-1; hp=x-hp*0.0; // white
+    const y=x*(1-R)+2*R*Math.cos(w)*y1-R*R*y2;y2=y1;y1=y;
+    if(--grainLeft<=0){grainLeft=Math.floor(SR*(0.002+nr()*0.012));grainEnv=nr()<c.grain?nr()*0.25:1;}
+    out[i]=y*c.fizz*e*(1-c.grain*0.6+c.grain*0.6*grainEnv)*2.2;
+  }
+  // Bubbles
+  const notes=score.bubbleNotes;
+  for(let i=0;i<n;i+=Math.floor(SR*0.005)){
+    const e=score.env(i/SR*1000);
+    if(nr()<c.bubbleRate*0.005*e*c.bubbles*1.5){
+      const f0=pick(nr,notes), len=Math.floor(SR*(0.02+nr()*0.04)), amp=(0.3+0.4*nr())*c.bubbles;let ph=0;
+      for(let k=0;k<len&&i+k<n;k++){const t=k/SR;ph+=f0*(1+t/0.03)/SR;out[i+k]+=Math.sin(2*Math.PI*ph)*amp*Math.exp(-t/0.012)*(k<40?k/40:1);}
+    }
+  }
+  return out;
+}
+function bitcrush(x,amount){if(amount<=0)return x;const levels=Math.pow(2,16-amount*12),hold=1+Math.floor(amount*6);
+  let held=0;for(let i=0;i<x.length;i++){if(i%hold===0)held=Math.round(x[i]*levels)/levels;x[i]=held;}return x;}
+function reverb(x,mix){
+  const out=new Float32Array(x.length), wet=new Float32Array(x.length);
+  for(const d of [0.0297,0.0371,0.0411,0.0437]){const L=Math.floor(d*SR),b=new Float32Array(L);let k=0;
+    for(let i=0;i<x.length;i++){const y=b[k];b[k]=x[i]+y*0.7;k=(k+1)%L;wet[i]+=y*0.25;}}
+  for(const d of [0.005,0.0017]){const L=Math.floor(d*SR),b=new Float32Array(L);let k=0;
+    for(let i=0;i<x.length;i++){const bb=b[k];const y=-wet[i]+bb;b[k]=wet[i]+bb*0.5;k=(k+1)%L;wet[i]=y;}}
+  for(let i=0;i<x.length;i++)out[i]=x[i]*(1-mix)+wet[i]*mix*2;
+  return out;
+}
+function synth(score){
+  const n=Math.floor(score.duration/1000*SR), c=score.cfg; let mix=new Float32Array(n);
+  for(const h of score.hits){
+    const o=score.engine==='diode'?diodeVoice(h,c):chemVoice(h), st=Math.floor(h.t/1000*SR);
+    for(let i=0;i<o.length&&st+i<n;i++)mix[st+i]+=o[i];
+  }
+  if(score.engine==='chemical'){const fz=chemFizz(score,n);for(let i=0;i<n;i++)mix[i]+=fz[i];}
+  else bitcrush(mix,c.crush);
+  mix=reverb(mix,c.reverb);
+  let peak=1e-9;for(const v of mix)peak=Math.max(peak,Math.abs(v));
+  for(let i=0;i<n;i++)mix[i]*=c.volume/peak;
+  const fade=Math.floor(0.03*SR);for(let i=0;i<fade;i++)mix[n-1-i]*=i/fade;
+  return mix;
+}
+
+// ---------- light: frames at 30 fps, 3-bit ----------
+function frames(score){
+  const out=[], nF=Math.ceil(score.duration/FRAME_MS);
+  if(score.engine==='diode'){
+    for(let f=0;f<nF;f++){const t=f*FRAME_MS, g=new Uint8Array(625);
+      for(const h of score.hits){const age=t-h.t, len=h.hold*FRAME_MS;if(age<0||age>=len)continue;
+        const level=age<len-FRAME_MS?7:3;drawDiodeConfig(g,score.pool[h.cfg],age/len,level);}
+      out.push(g);}
+  } else {
+    const env=score.env;
+    const field=score.field; let z=0;
+    const v=new Float32Array(625);
+    for(let f=0;f<nF;f++){const t=f*FRAME_MS;
+      // The texture flows slowly, and surges forward on every hit.
+      z+=0.012+0.05*env(t);
+      for(let k=0;k<625;k++)if(EXISTS[k])v[k]=field.value(k%25,Math.floor(k/25),z);
+      const g=new Uint8Array(625);
+      // The loudness picks how many LEDs light (up to ~45%, as in the reference): the
+      // strongest parts of the texture first, so it opens from its cores outwards.
+      const e=env(t), want=Math.round(e*0.45*489);
+      if(want>2){
+        const vals=[];for(let k=0;k<625;k++)if(EXISTS[k])vals.push(v[k]);
+        vals.sort((a,b)=>b-a);
+        const thr=Math.max(vals[Math.min(vals.length-1,want)],1e-4), core=vals[Math.floor(want*0.4)];
+        for(let k=0;k<625;k++){if(EXISTS[k]&&v[k]>thr)g[k]=v[k]>=core?7:4;}
+      }
+      out.push(g);}
+  }
+  return out;
+}
+
+// ---------- UI ----------
+const cv=document.getElementById('m'), ctx=cv.getContext('2d');
+const sc=document.getElementById('scope'), sctx=sc.getContext('2d');
+let audio=null, playing=null, current=null;
+function drawMatrix(g){const S=cv.width,cell=S*0.88/25,o=(S-cell*25)/2;
+  ctx.clearRect(0,0,S,S);ctx.fillStyle='#000';ctx.beginPath();ctx.arc(S/2,S/2,S/2,0,7);ctx.fill();
+  for(let y=0;y<25;y++)for(let x=0;x<25;x++){const k=y*25+x;if(!EXISTS[k])continue;
+    const v=g?g[k]:0, t=v/7, c=v?Math.round(31+224*Math.pow(t,0.6)):28;
+    ctx.fillStyle=`rgb(${c},${c},${c})`;ctx.beginPath();ctx.arc(o+(x+.5)*cell,o+(y+.5)*cell,cell*.37,0,7);ctx.fill();}}
+function drawScope(pcm,pos){const W=sc.width,H=sc.height;sctx.clearRect(0,0,W,H);
+  sctx.fillStyle=getComputedStyle(document.body).color;const step=Math.floor(pcm.length/W);
+  for(let x=0;x<W;x++){let m=0;for(let i=x*step;i<(x+1)*step;i++)m=Math.max(m,Math.abs(pcm[i]||0));
+    sctx.globalAlpha=x/W<pos?0.9:0.3;sctx.fillRect(x,H/2-m*H/2,1,Math.max(1,m*H));}
+  sctx.globalAlpha=1;}
+function generate(){
+  const name=document.getElementById('name').value.trim()||'App';
+  const seed=document.getElementById('seed').value.trim()||'0';
+  const engine=document.getElementById('engine').value;
+  const score=build(seed,name,engine);
+  const fr=frames(score), pcm=synth(score);
+  current={score,fr,pcm,name,engine,seed};
+  document.getElementById('meta').textContent=
+    `hash ${hashStr(seed+'|'+name+'|'+engine).toString(16)} · ${score.hits.length} vuruş · ${score.duration} ms`;
+  drawMatrix(null);drawScope(pcm,0);
+  return current;
+}
+let actx=null;
+function play(){
+  const c=generate();
+  actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+  if(playing)playing.stop();
+  const buf=actx.createBuffer(1,c.pcm.length,SR);buf.copyToChannel(c.pcm,0);
+  const src=actx.createBufferSource();src.buffer=buf;src.connect(actx.destination);
+  const start=actx.currentTime+0.05;src.start(start);playing=src;
+  const loop=()=>{const t=(actx.currentTime-start)*1000;
+    if(t<0){requestAnimationFrame(loop);return;}
+    const i=Math.floor(t/FRAME_MS);
+    if(i<c.fr.length){drawMatrix(c.fr[i]);drawScope(c.pcm,t/c.score.duration);requestAnimationFrame(loop);}
+    else{drawMatrix(null);drawScope(c.pcm,1);
+      if(document.getElementById('loop').checked)setTimeout(play,500);}};
+  requestAnimationFrame(loop);
+}
+function wav(){const c=current||generate();const n=c.pcm.length,b=new DataView(new ArrayBuffer(44+n*2));
+  const w=(o,s)=>{for(let i=0;i<s.length;i++)b.setUint8(o+i,s.charCodeAt(i));};
+  w(0,'RIFF');b.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,1,true);
+  b.setUint32(24,SR,true);b.setUint32(28,SR*2,true);b.setUint16(32,2,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++)b.setInt16(44+i*2,Math.max(-1,Math.min(1,c.pcm[i]))*32767,true);
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));a.download=`${c.name}-${c.engine}.wav`;a.click();}
+for(const n of ['WhatsApp','Gmail','Telegram','Instagram','Slack','Discord','Spotify','Mesajlar']){
+  const b=document.createElement('button');b.textContent=n;b.onclick=()=>{document.getElementById('name').value=n;play();};
+  document.getElementById('chips').append(b);}
+document.getElementById('play').onclick=play;
+document.getElementById('wav').onclick=wav;
+document.getElementById('rnd').onclick=()=>{document.getElementById('seed').value=Math.floor(Math.random()*2**48).toString(16);play();};
+document.getElementById('engine').onchange=()=>{renderSliders();play();};
+// Slider schema: [key, label, min, max, step]
+const SCHEMA={
+  diode:[
+    ['bip','Bip (kısa tiz ton) miktarı',0,1,0.05],['bop','Bop (aşağı kayan ton) miktarı',0,1,0.05],
+    ['blip','Blip (çok kısa tiz) miktarı',0,1,0.05],['click','Tık miktarı',0,1,0.05],['zap','Zap (inen ıslık) miktarı',0,1,0.05],
+    ['pitchLow','En pes ton (Hz)',100,2000,10],['pitchHigh','En tiz ton (Hz)',300,5000,10],
+    ['toneLen','Ton uzunluğu (ms)',15,250,5],['shape','Ton biçimi (0 yumuşak sinüs, 1 sert kare)',0,1,0.05],
+    ['bopDrop','Bop kayma miktarı (oktav)',0,1.5,0.05],['vibrato','Titreme (vibrato)',0,1,0.05],
+    ['stepMin','Vuruş aralığı en az (ms)',40,250,5],['stepMax','Vuruş aralığı en çok (ms)',40,300,5],
+    ['phrases','Cümle sayısı',1,10,1],['notesMax','Cümle başına en çok nota',2,8,1],['gapMax','Cümleler arası boşluk (adım)',1,8,1],
+    ['crush','Dijital bozma (bitcrush)',0,1,0.05],['reverb','Yankı',0,0.8,0.02],['volume','Ses düzeyi',0.2,1,0.05],
+  ],
+  chemical:[
+    ['fizz','Fışırtı miktarı',0,2,0.05],['fizzTone','Fışırtı tonu (Hz)',800,12000,100],['fizzWidth','Fışırtı genişliği (dar ıslık – geniş hava)',0,1,0.05],
+    ['grain','Çıtırtı (tanecik)',0,1,0.05],['bubbles','Kabarcık miktarı',0,1.5,0.05],['bubbleRate','Kabarcık sıklığı (/sn)',2,80,1],
+    ['bubbleLow','Kabarcık en pes (Hz)',100,3000,10],['bubbleHigh','Kabarcık en tiz (Hz)',200,6000,10],
+    ['gloop','Gloop (pes balon) olasılığı',0,1,0.05],['thump','Gümleme olasılığı',0,1,0.05],
+    ['swellAttack','Kabarma süresi (ms)',20,400,10],['swellRelease','Sönme süresi (ms)',60,900,10],
+    ['hitsMin','En az kabarma',1,10,1],['hitsMax','En çok kabarma',1,12,1],['spacingMin','Kabarma aralığı en az (ms)',80,600,10],['spacingMax','Kabarma aralığı en çok (ms)',100,900,10],
+    ['reverb','Yankı',0,0.8,0.02],['volume','Ses düzeyi',0.2,1,0.05],
+  ],
+};
+function saveCfg(){try{localStorage.setItem('glyphGenCfg2',JSON.stringify(CFG));}catch(e){}
+  document.getElementById('json').value=JSON.stringify(CFG);}
+function renderSliders(){
+  const eng=document.getElementById('engine').value, box=document.getElementById('sliders');box.innerHTML='';
+  for(const [key,label,min,max,step] of SCHEMA[eng]){
+    const id='s_'+key, wrap=document.createElement('div');wrap.className='sl';
+    wrap.innerHTML=`<span><label for="${id}" style="all:unset">${label}</label></span><output id="o_${key}">${CFG[eng][key]}</output>
+      <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${CFG[eng][key]}">`;
+    const inp=wrap.querySelector('input');
+    inp.oninput=()=>{CFG[eng][key]=+inp.value;wrap.querySelector('output').textContent=inp.value;saveCfg();};
+    inp.onchange=()=>play();
+    box.append(wrap);
+  }
+  saveCfg();
+}
+document.getElementById('copy').onclick=async()=>{const t=document.getElementById('json');t.value=JSON.stringify(CFG,null,1);t.select();
+  try{await navigator.clipboard.writeText(t.value);document.getElementById('copy').textContent='Kopyalandı ✓';setTimeout(()=>document.getElementById('copy').textContent='Ayarları kopyala',1500);}catch(e){}};
+document.getElementById('reset').onclick=()=>{const eng=document.getElementById('engine').value;CFG[eng]=JSON.parse(JSON.stringify(DEFAULTS[eng]));renderSliders();play();};
+
+document.getElementById('name').addEventListener('keydown',e=>{if(e.key==='Enter')play();});
+document.getElementById('seed').addEventListener('keydown',e=>{if(e.key==='Enter')play();});
+renderSliders();
+generate();
+</script>
+</body>
+</html>

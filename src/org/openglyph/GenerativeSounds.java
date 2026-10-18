@@ -40,32 +40,34 @@ import org.openglyph.core.Generative;
  */
 final class GenerativeSounds {
     private static final String TAG = "OpenGlyphSounds";
-    static final int SAMPLE_RATE = 44100;
+    static final int SAMPLE_RATE = Generative.SR;
     private static final String PREFS = "generative_sounds";
     private static final String FOLDER = Environment.DIRECTORY_NOTIFICATIONS + "/OpenGlyph/";
 
     private final Context mContext;
-    private final long mSeed;
     private final Map<String, Generative.Theme> mThemes = new HashMap<>();
     private final SharedPreferences mPrefs;
 
     GenerativeSounds(Context context) {
         mContext = context;
-        mSeed = deviceSeed(context.getContentResolver());
+        deviceSeed(context.getContentResolver()); // make sure there is one
         mPrefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    /** Random once per device (and per factory reset), then fixed. */
-    static long deviceSeed(ContentResolver cr) {
+    /**
+     * This phone's seed (text, as typed in the browser generator): random on first use, then
+     * fixed until the user rerolls or edits it in Settings.
+     */
+    static String deviceSeed(ContentResolver cr) {
         String s = Settings.Secure.getString(cr, GlyphSettings.SEED);
-        if (s != null) {
-            try {
-                return Long.parseUnsignedLong(s, 16);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        long seed = new SecureRandom().nextLong();
-        Settings.Secure.putString(cr, GlyphSettings.SEED, Long.toHexString(seed));
+        if (s != null && !s.trim().isEmpty()) return s.trim();
+        return reroll(cr);
+    }
+
+    /** A new random seed: every app's sound and light change. */
+    static String reroll(ContentResolver cr) {
+        String seed = Long.toHexString(new SecureRandom().nextLong() >>> 16);
+        Settings.Secure.putString(cr, GlyphSettings.SEED, seed);
         return seed;
     }
 
@@ -77,13 +79,14 @@ final class GenerativeSounds {
     /** The app's theme from the current engine; the seed is this phone's seed + app name. */
     synchronized Generative.Theme theme(String pkg) {
         Generative.Engine engine = engine();
-        return mThemes.computeIfAbsent(engine + ":" + pkg,
-                k -> Generative.theme(mSeed, label(pkg), engine));
+        String seed = deviceSeed(mContext.getContentResolver());
+        return mThemes.computeIfAbsent(seed + ":" + engine + ":" + pkg,
+                k -> Generative.theme(seed, label(pkg), engine));
     }
 
     /** Plays an app's sound now (Settings preview). */
     void play(String pkg) {
-        short[] pcm = theme(pkg).synth(SAMPLE_RATE);
+        short[] pcm = theme(pkg).synth();
         AudioTrack track = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -115,7 +118,7 @@ final class GenerativeSounds {
 
     /** The app's sound in MediaStore, written on first use. */
     synchronized Uri soundUri(String pkg) {
-        String key = "uri:" + engine() + ":" + pkg;
+        String key = "uri:" + deviceSeed(mContext.getContentResolver()) + ":" + engine() + ":" + pkg;
         String saved = mPrefs.getString(key, null);
         if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
         String name = "OpenGlyph " + label(pkg).replaceAll("[\\\\/:*?\"<>|]", "_") + " ("
@@ -131,7 +134,7 @@ final class GenerativeSounds {
         Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
         if (uri == null) return null;
         try (OutputStream out = cr.openOutputStream(uri)) {
-            out.write(Generative.wav(theme(pkg).synth(SAMPLE_RATE), SAMPLE_RATE));
+            out.write(Generative.wav(theme(pkg).synth(), SAMPLE_RATE));
         } catch (Exception e) {
             Log.w(TAG, "writing sound for " + pkg + " failed", e);
             cr.delete(uri, null, null);
@@ -209,8 +212,20 @@ final class GenerativeSounds {
             } catch (Exception e) {
                 Log.w(TAG, "revert " + pkg + " failed", e);
             }
-            mPrefs.edit().remove(key).remove("done:" + pkg).apply();
+            mPrefs.edit().remove(key).remove("done:" + pkg).remove("applied:" + pkg).apply();
         }
+        // Drop the generated files too; they are made again on demand.
+        SharedPreferences.Editor e = mPrefs.edit();
+        for (Map.Entry<String, ?> entry : mPrefs.getAll().entrySet()) {
+            if (!entry.getKey().startsWith("uri:")) continue;
+            try {
+                mContext.getContentResolver().delete(Uri.parse((String) entry.getValue()), null, null);
+            } catch (Exception ignored) {
+            }
+            e.remove(entry.getKey());
+        }
+        e.apply();
+        mThemes.clear();
     }
 
     /** A new channel may have appeared: look at the app again next time. */

@@ -46,6 +46,10 @@
             app:useSimpleSummaryProvider="true"
             android:persistent="false" />
 
+        <Preference
+            android:key="device_seed"
+            android:title="@string/settings_seed" />
+
         <SwitchPreferenceCompat
             android:key="open_glyph_generative_sounds"
             android:title="@string/settings_generative_sounds"

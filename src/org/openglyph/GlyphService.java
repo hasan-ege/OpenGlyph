@@ -243,9 +243,10 @@ public final class GlyphService extends Service {
         if (mRecordLed != null) mRecordLed.update();
         if (mMusic != null) mMusic.setEnabled(GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.MUSIC));
         boolean genSounds = GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS);
-        String engine = GlyphSettings.string(getContentResolver(), GlyphSettings.ENGINE, "DIODE");
+        String engine = GlyphSettings.string(getContentResolver(), GlyphSettings.ENGINE, "DIODE")
+                + "|" + GlyphSettings.string(getContentResolver(), GlyphSettings.SEED, "");
         if (mSounds != null && mEngine != null && !mEngine.equals(engine) && genSounds) {
-            // Another engine: every app's sound changes; swap the ones we set.
+            // Another engine or seed: every app's sound changes; swap the ones we set.
             mBackground.execute(() -> {
                 mSounds.revertAll();
                 for (AppList.App app : AppList.launchable(this)) mSounds.apply(app.pkg);

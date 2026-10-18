@@ -164,4 +164,8 @@
     <string name="settings_engine">Ses motoru</string>
     <string name="engine_diode">Diode: kaleydoskop kıvılcımlar, keskin bip sesleri</string>
     <string name="engine_chemical">Chemical: büyüyen bloblar, damla ve tel sesleri</string>
+    <string name="settings_seed">Cihaz seed\'i</string>
+    <string name="settings_seed_message">Her uygulamanın üretken sesi ve animasyonu bu seed\'den ve uygulamanın adından gelir. Tarayıcıdaki generator\'a aynı seed\'i yazarsan aynı sesleri duyarsın.</string>
+    <string name="settings_seed_save">Kaydet</string>
+    <string name="settings_seed_reroll">🎲 Yeni seed</string>
 </resources>

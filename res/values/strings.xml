@@ -174,4 +174,8 @@
     <string name="settings_engine">Sound engine</string>
     <string name="engine_diode">Diode: kaleidoscopic sparks, crisp bleeps</string>
     <string name="engine_chemical">Chemical: growing blobs, drips and plucks</string>
+    <string name="settings_seed">Device seed</string>
+    <string name="settings_seed_message">Every app\'s generative sound and animation come from this seed and the app\'s name. Type the same seed into the browser generator to hear the same sounds.</string>
+    <string name="settings_seed_save">Save</string>
+    <string name="settings_seed_reroll">🎲 New seed</string>
 </resources>
