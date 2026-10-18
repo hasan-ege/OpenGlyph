@@ -9,7 +9,7 @@ import android.os.Bundle;
 /**
  * Posts one notification as this package (built under several package names), to try
  * OpenGlyph's per-app generative notifications:
- *   adb shell am start -n <pkg>/org.openglyph.testnotify.Post --es text "hello"
+ *   adb shell am start -n <pkg>/org.openglyph.testnotify.Post --es title "Ayşe" --es text "hello"
  */
 public final class Post extends Activity {
     @Override
@@ -18,10 +18,11 @@ public final class Post extends Activity {
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel("test", "Test",
                 NotificationManager.IMPORTANCE_DEFAULT));
+        String title = getIntent().getStringExtra("title");
         String text = getIntent().getStringExtra("text");
         nm.notify((int) (System.currentTimeMillis() & 0xffff), new Notification.Builder(this, "test")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(getPackageName())
+                .setContentTitle(title == null ? getPackageName() : title)
                 .setContentText(text == null ? "Test" : text)
                 .build());
         finish();

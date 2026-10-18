@@ -82,8 +82,10 @@ final class GenerativeSounds {
     synchronized Generative.Theme theme(String pkg) {
         Generative.Engine engine = engine();
         String seed = deviceSeed(mContext.getContentResolver());
-        return mThemes.computeIfAbsent(seed + ":" + engine + ":" + pkg,
-                k -> Generative.theme(seed, label(pkg), engine));
+        String label = label(pkg);
+        // The name is part of the seed: an app renamed by an update gets a new theme.
+        return mThemes.computeIfAbsent(seed + ":" + engine + ":" + pkg + ":" + label,
+                k -> Generative.theme(seed, label, engine));
     }
 
     /** Plays an app's sound now (Settings preview). */
@@ -125,7 +127,7 @@ final class GenerativeSounds {
 
     /** The app's sound in MediaStore for the current stamp, written on first use. */
     synchronized Uri soundUri(String pkg) {
-        String key = "uri:" + stamp() + ":" + pkg;
+        String key = "uri:" + stamp() + ":" + pkg + ":" + label(pkg);
         String saved = mPrefs.getString(key, null);
         if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
         String name = "OpenGlyph " + label(pkg).replaceAll("[\\\\/:*?\"<>|]", "_") + " ("
@@ -150,7 +152,12 @@ final class GenerativeSounds {
         ContentValues done = new ContentValues();
         done.put(MediaStore.Audio.Media.IS_PENDING, 0);
         cr.update(uri, done, null, null);
-        mPrefs.edit().putString(key, uri.toString()).commit();
+        SharedPreferences.Editor e = mPrefs.edit();
+        String samePkg = "uri:" + stamp() + ":" + pkg + ":";
+        for (String old : mPrefs.getAll().keySet()) {
+            if (old.startsWith(samePkg)) e.remove(old); // the app's sound under an older name
+        }
+        e.putString(key, uri.toString()).commit();
         return uri;
     }
 

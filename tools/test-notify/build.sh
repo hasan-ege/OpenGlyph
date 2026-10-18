@@ -11,7 +11,10 @@ out=${2:-$here/$pkg.apk}
 w=$(mktemp -d)
 trap 'rm -rf "$w"' EXIT
 mkdir -p "$w/cls"
-"$bt/aapt2" link -I "$jar" --manifest "$here/AndroidManifest.xml" \
+# Each fake app gets its own name (Chat, Mail, News...): the generative seed uses the app name.
+label=$(echo "${pkg##*.}" | sed 's/./\U&/')
+sed "s/android:label=\"[^\"]*\"/android:label=\"$label\"/" "$here/AndroidManifest.xml" > "$w/AndroidManifest.xml"
+"$bt/aapt2" link -I "$jar" --manifest "$w/AndroidManifest.xml" \
     --rename-manifest-package "$pkg" -o "$w/unsigned.apk"
 javac --release 17 -nowarn -cp "$jar" -d "$w/cls" "$here"/src/org/openglyph/testnotify/*.java
 "$bt/d8" --min-api 33 --lib "$jar" --output "$w" $(find "$w/cls" -name '*.class')
