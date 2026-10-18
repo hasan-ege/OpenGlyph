@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="permission_control_label">Glyph Matrix\'i kontrol et</string>
+    <string name="permission_control_desc">Uygulamanın telefonun arkasındaki Glyph Matrix\'e çizim yapmasına izin verir.</string>
+
+    <string name="settings_summary">Bildirimler, aramalar, oyuncaklar ve kayıt ışığı</string>
+    <string name="settings_intro">Telefonun arkasındaki yuvarlak LED matrisi, OpenGlyph tarafından yönetilir.</string>
+    <string name="settings_main_switch">Glyph Matrix\'i kullan</string>
+    <string name="settings_brightness">Parlaklık</string>
+    <string name="settings_effects">Şunlarda yansın</string>
+    <string name="settings_notifications">Bildirimler</string>
+    <string name="settings_notifications_summary">Ses çıkaran bildirimlerde halka dalgası</string>
+    <string name="settings_calls">Gelen aramalar</string>
+    <string name="settings_calls_summary">Telefon çalarken halkalar</string>
+    <string name="settings_charging">Şarj</string>
+    <string name="settings_charging_summary">Şarja takınca pil seviyesini gösterir</string>
+    <string name="settings_record_led">Kayıt ışığı</string>
+    <string name="settings_record_led_summary">Video kaydı sırasında kameraların yanındaki kırmızı ışık yanıp söner</string>
+    <string name="settings_test">Test et</string>
+    <string name="settings_test_summary">Bildirim efektini bir kez oynat</string>
+    <string name="settings_toys">Glyph Button ve oyuncaklar</string>
+    <string name="settings_toys_switch">Glyph oyuncakları</string>
+    <string name="settings_toys_summary">Matrisin altındaki noktaya bas: oyuncak görünür, tekrar bas: sıradaki, uzun bas: oyuncağın eylemi</string>
+    <string name="toy_clock">Saat</string>
+    <string name="toy_battery">Pil</string>
+    <string name="toy_stopwatch">Kronometre</string>
+    <string name="toy_stopwatch_summary">Uzun basış: başlat, durdur, sıfırla</string>
+    <string name="settings_footer">Glyph oyuncakları kapalıyken Glyph Button\'a basmak pil seviyesini gösterir.</string>
+</resources>

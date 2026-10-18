@@ -1,0 +1,44 @@
+// OpenGlyph: open-source Glyph Matrix service for the Nothing Phone (3) (metroid).
+// Lives at packages/apps/OpenGlyph (or device/nothing/metroid/OpenGlyph) in the ROM tree.
+
+android_app {
+    name: "OpenGlyph",
+    defaults: ["SettingsLibDefaults"],
+    srcs: [
+        "src/**/*.java",
+        "aidl/**/*.aidl",
+    ],
+    aidl: {
+        local_include_dirs: ["aidl"],
+    },
+    resource_dirs: ["res"],
+    manifest: "AndroidManifest.xml",
+
+    platform_apis: true,
+    certificate: "platform",
+    privileged: true,
+    system_ext_specific: true,
+    required: ["privapp-permissions-org.openglyph.xml"],
+    static_libs: [
+        "androidx.core_core",
+        "androidx.preference_preference",
+    ],
+}
+
+prebuilt_etc {
+    name: "privapp-permissions-org.openglyph.xml",
+    src: "privapp-permissions-org.openglyph.xml",
+    sub_dir: "permissions",
+    system_ext_specific: true,
+}
+
+// Android-free core, so apps or other services can reuse the layout and effects.
+java_library {
+    name: "OpenGlyphCore",
+    srcs: [
+        "src/org/openglyph/core/*.java",
+        "src/org/openglyph/effects/*.java",
+        "src/org/openglyph/toys/*.java",
+    ],
+    sdk_version: "current",
+}

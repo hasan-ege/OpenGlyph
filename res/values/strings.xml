@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Glyph Matrix</string>
+    <string name="permission_control_label">control the Glyph Matrix</string>
+    <string name="permission_control_desc">Allows the app to draw on the Glyph Matrix on the back of the phone.</string>
+
+    <string name="settings_summary">Notifications, calls, toys and the recording light</string>
+    <string name="settings_intro">The round LED matrix on the back of the phone, driven by OpenGlyph.</string>
+    <string name="settings_main_switch">Use Glyph Matrix</string>
+    <string name="settings_brightness">Brightness</string>
+    <string name="settings_effects">Light up for</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notifications_summary">Rings for notifications that make a sound</string>
+    <string name="settings_calls">Incoming calls</string>
+    <string name="settings_calls_summary">Rings while the phone is ringing</string>
+    <string name="settings_charging">Charging</string>
+    <string name="settings_charging_summary">Shows the battery level when you plug in</string>
+    <string name="settings_record_led">Recording light</string>
+    <string name="settings_record_led_summary">Blinks the red light next to the cameras while a video is recorded</string>
+    <string name="settings_test">Test</string>
+    <string name="settings_test_summary">Play the notification effect once</string>
+    <string name="settings_toys">Glyph Button and toys</string>
+    <string name="settings_toys_switch">Glyph toys</string>
+    <string name="settings_toys_summary">Press the spot under the matrix to show a toy, press again for the next one, long press for its action</string>
+    <string name="toy_clock">Clock</string>
+    <string name="toy_battery">Battery</string>
+    <string name="toy_stopwatch">Stopwatch</string>
+    <string name="toy_stopwatch_summary">Long press: start, stop, reset</string>
+    <string name="settings_footer">With Glyph toys off, pressing the Glyph Button shows the battery level.</string>
+</resources>

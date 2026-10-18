@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:title="@string/app_name">
+
+    <com.android.settingslib.widget.TopIntroPreference
+        android:key="intro"
+        android:title="@string/settings_intro" />
+
+    <com.android.settingslib.widget.MainSwitchPreference
+        android:key="open_glyph_enabled"
+        android:title="@string/settings_main_switch"
+        android:persistent="false" />
+
+    <SeekBarPreference
+        android:key="open_glyph_brightness"
+        android:title="@string/settings_brightness"
+        android:icon="@drawable/ic_brightness"
+        android:max="255"
+        app:min="8"
+        app:showSeekBarValue="false"
+        app:updatesContinuously="true"
+        android:persistent="false" />
+
+    <PreferenceCategory
+        android:key="effects"
+        android:title="@string/settings_effects">
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_notifications"
+            android:title="@string/settings_notifications"
+            android:summary="@string/settings_notifications_summary"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_calls"
+            android:title="@string/settings_calls"
+            android:summary="@string/settings_calls_summary"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_charging"
+            android:title="@string/settings_charging"
+            android:summary="@string/settings_charging_summary"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_record_led"
+            android:title="@string/settings_record_led"
+            android:summary="@string/settings_record_led_summary"
+            android:persistent="false" />
+
+        <Preference
+            android:key="test"
+            android:title="@string/settings_test"
+            android:summary="@string/settings_test_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="toys"
+        android:title="@string/settings_toys">
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_toys"
+            android:title="@string/settings_toys_switch"
+            android:summary="@string/settings_toys_summary"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_toy_clock"
+            android:dependency="open_glyph_toys"
+            android:title="@string/toy_clock"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_toy_battery"
+            android:dependency="open_glyph_toys"
+            android:title="@string/toy_battery"
+            android:persistent="false" />
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_toy_stopwatch"
+            android:dependency="open_glyph_toys"
+            android:title="@string/toy_stopwatch"
+            android:summary="@string/toy_stopwatch_summary"
+            android:persistent="false" />
+    </PreferenceCategory>
+
+    <com.android.settingslib.widget.FooterPreference
+        android:key="footer"
+        android:title="@string/settings_footer" />
+</PreferenceScreen>

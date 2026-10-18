@@ -1,0 +1,7 @@
+# OpenGlyph runs as system_app. The device tree's sepolicy/private/glyph.te already lets
+# system_app read and write the matrix-leds nodes (sysfs_led_driver_info). These rules only
+# cover the /sys/class/leds/matrix-leds fallback path.
+# Copy into device/nothing/metroid/sepolicy/private/ and check `adb logcat | grep avc`
+# on first boot; anything denied there belongs here.
+allow system_app sysfs_leds:dir search;
+allow system_app sysfs_leds:lnk_file read;
