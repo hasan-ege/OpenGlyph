@@ -47,4 +47,5 @@
     <string name="pattern_sweep">Süpürme</string>
     <string name="pattern_dot">Nokta</string>
     <string name="pattern_flash">Flaş</string>
+    <string name="toy_sdk_summary">Glyph Matrix SDK oyuncağı</string>
 </resources>

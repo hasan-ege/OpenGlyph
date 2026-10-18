@@ -59,6 +59,28 @@ public final class GlyphSettingsFragment extends SettingsBasePreferenceFragment 
             });
         }
 
+        // Toys from apps built with Nothing's Glyph Matrix SDK, after the built-in ones.
+        androidx.preference.PreferenceCategory toyCategory = findPreference("toys");
+        GlyphService service = GlyphService.get();
+        if (service != null) {
+            for (org.openglyph.toys.RemoteToy toy : service.sdkToys()) {
+                String key = GlyphSettings.toyKey(toy.id());
+                androidx.preference.SwitchPreferenceCompat sw =
+                        new androidx.preference.SwitchPreferenceCompat(requireContext());
+                sw.setKey(key);
+                sw.setPersistent(false);
+                sw.setTitle(toy.label());
+                sw.setSummary(getString(R.string.toy_sdk_summary));
+                sw.setChecked(GlyphSettings.flag(cr, key));
+                sw.setOnPreferenceChangeListener((p, value) -> {
+                    GlyphSettings.setFlag(cr, key, (Boolean) value);
+                    return true;
+                });
+                toyCategory.addPreference(sw);
+                sw.setDependency(GlyphSettings.TOYS);
+            }
+        }
+
         TwoStatePreference flip = findPreference(GlyphSettings.FLIP);
         flip.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP));
         flip.setOnPreferenceChangeListener((p, value) -> {
@@ -120,8 +142,8 @@ public final class GlyphSettingsFragment extends SettingsBasePreferenceFragment 
 
         Preference test = findPreference("test");
         test.setOnPreferenceClickListener(p -> {
-            GlyphService service = GlyphService.get();
-            if (service != null) service.testPulse();
+            GlyphService running = GlyphService.get();
+            if (running != null) running.testPulse();
             return true;
         });
 

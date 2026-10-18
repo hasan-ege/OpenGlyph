@@ -1,0 +1,21 @@
+// OpenGlyphCompat: lets apps built with Nothing's Glyph Matrix SDK draw through OpenGlyph.
+// Package name and service are fixed by that SDK; see ../docs/nothing-sdk-interface.md.
+
+android_app {
+    name: "OpenGlyphCompat",
+    srcs: [
+        "src/**/*.java",
+        "aidl/**/*.aidl",
+        ":OpenGlyph-aidl",
+    ],
+    aidl: {
+        local_include_dirs: ["aidl"],
+    },
+    resource_dirs: ["res"],
+    manifest: "AndroidManifest.xml",
+
+    platform_apis: true,
+    certificate: "platform",
+    system_ext_specific: true,
+    required: ["OpenGlyph"],
+}

@@ -20,11 +20,29 @@ public final class ToyHost implements Effect {
     private final Supplier<Toy.Context> context;
     private int index;
     private long visibleUntil = Long.MIN_VALUE;
+    /** The toy last reported as shown, so onShown/onHidden fire exactly once per change. */
+    private Toy shown;
 
     public ToyHost(Supplier<Toy.Context> context, Toy... toys) {
         this.context = context;
         for (Toy t : toys) all.add(t);
         enabled.addAll(all);
+    }
+
+    /** Replaces the toys after the built-in ones (e.g. Nothing SDK toys found on the device). */
+    public synchronized void setExtraToys(List<Toy> extra, int builtInCount) {
+        Toy current = current();
+        while (all.size() > builtInCount) {
+            Toy gone = all.remove(all.size() - 1);
+            if (gone == shown) {
+                gone.onHidden();
+                shown = null;
+            }
+            enabled.remove(gone);
+        }
+        all.addAll(extra);
+        enabled.addAll(extra);
+        index = Math.max(0, enabled.indexOf(current));
     }
 
     public synchronized List<Toy> allToys() {
@@ -37,6 +55,7 @@ public final class ToyHost implements Effect {
         enabled.clear();
         for (Toy t : all) if (ids.contains(t.id())) enabled.add(t);
         index = Math.max(0, enabled.indexOf(current));
+        syncShown(Long.MIN_VALUE + 1);
     }
 
     public synchronized Toy current() {
@@ -47,6 +66,17 @@ public final class ToyHost implements Effect {
         if (enabled.isEmpty()) return;
         if (isVisible(now)) index = (index + 1) % enabled.size();
         visibleUntil = now + IDLE_MS;
+        syncShown(now);
+    }
+
+    public synchronized void onButtonDown(long now) {
+        Toy t = current();
+        if (t != null && isVisible(now)) t.onButtonDown(now);
+    }
+
+    public synchronized void onButtonUp(long now) {
+        Toy t = current();
+        if (t != null && isVisible(now)) t.onButtonUp(now);
     }
 
     public synchronized void onLongPress(long now) {
@@ -58,6 +88,16 @@ public final class ToyHost implements Effect {
 
     public synchronized void hide() {
         visibleUntil = Long.MIN_VALUE;
+        syncShown(Long.MIN_VALUE + 1);
+    }
+
+    /** Fires onShown/onHidden when the visible toy changed (including by timing out). */
+    private void syncShown(long now) {
+        Toy now_ = isVisible(now) ? current() : null;
+        if (now_ == shown) return;
+        if (shown != null) shown.onHidden();
+        shown = now_;
+        if (shown != null) shown.onShown();
     }
 
     private boolean isVisible(long now) {
@@ -69,6 +109,7 @@ public final class ToyHost implements Effect {
     @Override public int priority() { return PRIORITY_TOY; }
 
     @Override public synchronized boolean isActive(long now) {
+        syncShown(now);
         return isVisible(now);
     }
 

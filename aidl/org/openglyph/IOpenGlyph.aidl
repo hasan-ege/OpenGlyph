@@ -20,4 +20,15 @@ interface IOpenGlyph {
     void showFrame(IBinder token, in int[] grid, int priority);
 
     void clearFrame(IBinder token);
+
+    /**
+     * Used by OpenGlyphCompat (com.nothing.thirdparty) for apps built with Nothing's Glyph Matrix
+     * SDK. Frames from a package that provides an SDK toy go to that toy; others are shown as an
+     * app frame until clearPackageFrame().
+     *
+     * @param grid 625 row-major values, 0..4095
+     */
+    void showPackageFrame(String pkg, in int[] grid);
+
+    void clearPackageFrame(String pkg);
 }

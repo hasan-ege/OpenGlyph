@@ -39,6 +39,7 @@ public final class HostTests {
         recordingDetector();
         toys();
         nothingStyleFeatures();
+        remoteToys();
         System.out.println(failures == 0 ? "\nALL PASSED" : "\n" + failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
     }
@@ -96,6 +97,58 @@ public final class HostTests {
         host.setEnabled(java.util.Set.of());
         host.onTap(90000);
         check(!host.isActive(90000), "no enabled toys: nothing shows");
+    }
+
+    static void remoteToys() {
+        List<String> log = new ArrayList<>();
+        org.openglyph.toys.RemoteToy.Listener l = new org.openglyph.toys.RemoteToy.Listener() {
+            @Override public void onShow(org.openglyph.toys.RemoteToy t) { log.add("show " + t.label()); }
+            @Override public void onHide(org.openglyph.toys.RemoteToy t) { log.add("hide " + t.label()); }
+            @Override public void onEvent(org.openglyph.toys.RemoteToy t, String e) { log.add(e + " " + t.label()); }
+        };
+        org.openglyph.toys.RemoteToy dice = new org.openglyph.toys.RemoteToy(
+                "com.example.Dice", "com.example.dice.DiceToy", "Dice", true, l);
+        org.openglyph.toys.RemoteToy noLong = new org.openglyph.toys.RemoteToy(
+                "org.other", "org.other.T", "Other", false, l);
+        check(dice.id().equals("nt_com.example.dice_dicetoy"), "remote toy id is settings-safe");
+
+        org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
+        org.openglyph.toys.Toys.Clock clock = new org.openglyph.toys.Toys.Clock();
+        org.openglyph.toys.ToyHost host = new org.openglyph.toys.ToyHost(() -> ctx, clock);
+        host.setExtraToys(List.of(dice, noLong), 1);
+        check(host.allToys().size() == 3, "SDK toys are added after the built-in ones");
+
+        host.onTap(0);          // clock
+        host.onTap(100);        // dice
+        check(log.equals(List.of("show Dice")), "the SDK toy is bound when it comes on screen");
+        Frame f = new Frame();
+        host.render(f, 100);
+        check(f.isDark(), "nothing is drawn until the app sends a frame");
+        int[] grid = new int[625];
+        grid[12 * 25 + 12] = 4095;
+        dice.setFrame(grid);
+        f.clear();
+        host.render(f, 150);
+        check(f.get(12, 12) == 4095, "the app's frame is shown");
+
+        host.onButtonDown(200);
+        host.onLongPress(300);
+        host.onButtonUp(310);
+        check(log.subList(1, 4).equals(List.of("action_down Dice", "change Dice", "action_up Dice")),
+                "button events reach the toy as action_down / change / action_up");
+
+        host.onTap(400);        // other
+        check(log.get(4).equals("hide Dice") && log.get(5).equals("show Other"),
+                "switching unbinds the old toy before binding the next");
+        int before = log.size();
+        host.onLongPress(500);
+        check(log.size() == before, "no change event for a toy without long-press support");
+
+        check(!host.isActive(500 + org.openglyph.toys.ToyHost.IDLE_MS + 1)
+                && log.get(log.size() - 1).equals("hide Other"), "timing out unbinds the toy");
+
+        host.setExtraToys(List.of(), 1);
+        check(host.allToys().size() == 1, "uninstalled SDK toys disappear");
     }
 
     static void nothingStyleFeatures() {

@@ -48,4 +48,5 @@
     <string name="pattern_sweep">Sweep</string>
     <string name="pattern_dot">Dot</string>
     <string name="pattern_flash">Flash</string>
+    <string name="toy_sdk_summary">Glyph Matrix SDK toy</string>
 </resources>

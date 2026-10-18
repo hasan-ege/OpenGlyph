@@ -20,6 +20,16 @@ public interface Toy {
     /** Long press while this toy is shown. */
     default void onLongPress(long nowMs) {}
 
+    /** Glyph Button pressed / released while this toy is shown. */
+    default void onButtonDown(long nowMs) {}
+
+    default void onButtonUp(long nowMs) {}
+
+    /** The toy appeared on / left the matrix (remote toys bind / unbind their service here). */
+    default void onShown() {}
+
+    default void onHidden() {}
+
     /** While true the host keeps the toy on screen past its idle timeout. */
     default boolean keepsScreenOn() {
         return false;

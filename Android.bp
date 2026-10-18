@@ -42,3 +42,10 @@ java_library {
     ],
     sdk_version: "current",
 }
+
+// IOpenGlyph, shared with compat/ (OpenGlyphCompat).
+filegroup {
+    name: "OpenGlyph-aidl",
+    srcs: ["aidl/org/openglyph/IOpenGlyph.aidl"],
+    path: "aidl",
+}
