@@ -76,11 +76,24 @@ final class NothingToyBridge implements RemoteToy.Listener {
         f.addAction(Intent.ACTION_PACKAGE_REPLACED);
         f.addDataScheme("package");
         mContext.registerReceiver(mPackageReceiver, f, null, mHandler);
+        // We start in direct boot, before the user unlocks: apps' toy services (not direct
+        // boot aware) are invisible until then, so look again once the phone is unlocked.
+        mContext.registerReceiver(mUnlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED),
+                null, mHandler);
         rescan();
     }
 
+    private final android.content.BroadcastReceiver mUnlockReceiver =
+            new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            rescan();
+        }
+    };
+
     void stop() {
         mContext.unregisterReceiver(mPackageReceiver);
+        mContext.unregisterReceiver(mUnlockReceiver);
         mHandler.post(() -> {
             for (Connection c : mSelected.values()) mContext.unbindService(c);
             mSelected.clear();
@@ -169,7 +182,11 @@ final class NothingToyBridge implements RemoteToy.Listener {
         Connection c = new Connection(toy);
         Intent intent = new Intent(ACTION_TOY)
                 .setComponent(new ComponentName(toy.packageName(), toy.className()));
-        if (mContext.bindService(intent, c, Context.BIND_AUTO_CREATE)) return c;
+        // As the stock host does: the toy runs at foreground priority while bound (so it is not
+        // frozen mid-animation) and may start its own foreground service (always-on toys do).
+        int flags = Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE
+                | Context.BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND;
+        if (mContext.bindServiceAsUser(intent, c, flags, android.os.UserHandle.SYSTEM)) return c;
         Log.w(GlyphService.TAG, "cannot bind toy " + toy.className());
         return null;
     }

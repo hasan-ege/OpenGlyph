@@ -5,5 +5,6 @@
         <permission name="android.permission.READ_PHONE_STATE" />
         <permission name="android.permission.CAMERA_OPEN_CLOSE_LISTENER" />
         <permission name="android.permission.MODIFY_AUDIO_ROUTING" />
+        <permission name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
     </privapp-permissions>
 </permissions>
