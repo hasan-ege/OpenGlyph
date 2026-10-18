@@ -260,12 +260,12 @@ public final class Effects {
                     int h = Math.round(levels[x] * half);
                     for (int dy = -h; dy <= h; dy++) {
                         // Brightest at the centre line, dimmer towards the tips.
-                        double fall = h == 0 ? 1 : 1 - 0.55 * Math.abs(dy) / (double) h;
+                        double fall = h == 0 ? 1 : 1 - 0.24 * Math.abs(dy) / (double) h;
                         f.set(x, 12 + dy, (int) (Frame.MAX * fall));
                     }
                 }
             }
-            return 33;
+            return 16;
         }
     }
 }
