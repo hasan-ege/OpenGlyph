@@ -5,14 +5,14 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Generative notifications: an engine turns a seed (this phone's seed + the app's name) into
+ * Generative notifications: an engine turns a seed (this phone's seed + the app's package) into
  * a short sound and a Glyph Matrix animation that belong together, after the idea Nothing
  * describes for the Phone (3)'s generative ringtones (engines "Diode" and "Chemical"). Our own
  * implementation, designed against frames and audio of Nothing's published video.
  *
  * This is a 1:1 port of tools/generator/generator.html (the browser generator used to tune it): the
  * same integer hash and PRNG, the same order of random draws and the same synthesis, so a
- * seed and name heard in the browser sound and look the same on the phone.
+ * seed and package heard in the browser sound and look the same on the phone.
  *
  * - DIODE: circuit-like parts (bars, blocks, dot pairs) mirrored on X and Y, flashed for a few
  *   frames per hit, dark in between; each pattern has its own voice (bip, bop, blip, click,

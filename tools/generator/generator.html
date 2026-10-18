@@ -39,7 +39,7 @@ summary{cursor:pointer;font-weight:600;margin-bottom:8px}
   <canvas id="scope" width="880" height="112" aria-hidden="true"></canvas>
 </section>
 <section class="panel">
-  <div><label for="name">Uygulama adı</label><input id="name" type="text" value="WhatsApp"></div>
+  <div><label for="name">Uygulama paketi</label><input id="name" type="text" value="com.whatsapp"></div>
   <div class="chips" id="chips"></div>
   <div><label for="seed">Cihaz seed'i</label>
     <div class="row"><input id="seed" type="text" value="5eed1234abcd"><button id="rnd" title="Rastgele seed">🎲</button></div></div>
@@ -351,8 +351,11 @@ function wav(){const c=current||generate();const n=c.pcm.length,b=new DataView(n
   b.setUint32(24,SR,true);b.setUint32(28,SR*2,true);b.setUint16(32,2,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*2,true);
   for(let i=0;i<n;i++)b.setInt16(44+i*2,Math.max(-1,Math.min(1,c.pcm[i]))*32767,true);
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([b],{type:'audio/wav'}));a.download=`${c.name}-${c.engine}.wav`;a.click();}
-for(const n of ['WhatsApp','Gmail','Telegram','Instagram','Slack','Discord','Spotify','Mesajlar']){
-  const b=document.createElement('button');b.textContent=n;b.onclick=()=>{document.getElementById('name').value=n;play();};
+// The phone seeds by package name; the chips show the app, fill in its package.
+for(const [n,pkg] of [['WhatsApp','com.whatsapp'],['Gmail','com.google.android.gm'],['Telegram','org.telegram.messenger'],
+    ['Instagram','com.instagram.android'],['Slack','com.Slack'],['Discord','com.discord'],['Spotify','com.spotify.music'],
+    ['Mesajlar','com.google.android.apps.messaging']]){
+  const b=document.createElement('button');b.textContent=n;b.title=pkg;b.onclick=()=>{document.getElementById('name').value=pkg;play();};
   document.getElementById('chips').append(b);}
 document.getElementById('play').onclick=play;
 document.getElementById('wav').onclick=wav;

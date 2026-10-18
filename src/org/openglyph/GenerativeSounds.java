@@ -31,7 +31,7 @@ import org.openglyph.core.Generative;
 
 /**
  * Generative notification sounds. Each app gets a melody made from this phone's seed and the
- * app's package name (see {@link Generative}); the same theme drives its Glyph animation.
+ * app's package name (not its display name) (see {@link Generative}); the same theme drives its Glyph animation.
  *
  * With the setting on, each app's notification channels that use the default sound are
  * switched to its own sound (saved under Notifications/OpenGlyph, so it also shows up in the
@@ -43,7 +43,7 @@ final class GenerativeSounds {
     static final int SAMPLE_RATE = Generative.SR;
     private static final String PREFS = "generative_sounds";
     /** Bump when the generator changes, so the sounds already set are made again. */
-    static final int VERSION = 2;
+    static final int VERSION = 3; // 3: seeded by package instead of app name
     private static final String FOLDER = Environment.DIRECTORY_NOTIFICATIONS + "/OpenGlyph/";
 
     private final Context mContext;
@@ -82,10 +82,10 @@ final class GenerativeSounds {
     synchronized Generative.Theme theme(String pkg) {
         Generative.Engine engine = engine();
         String seed = deviceSeed(mContext.getContentResolver());
-        String label = label(pkg);
-        // The name is part of the seed: an app renamed by an update gets a new theme.
-        return mThemes.computeIfAbsent(seed + ":" + engine + ":" + pkg + ":" + label,
-                k -> Generative.theme(seed, label, engine));
+        // Seeded by the package, not the app's name: a rename keeps the app's sound and light,
+        // and two apps with the same name still differ.
+        return mThemes.computeIfAbsent(seed + ":" + engine + ":" + pkg,
+                k -> Generative.theme(seed, pkg, engine));
     }
 
     /** Plays an app's sound now (Settings preview). */
@@ -127,7 +127,7 @@ final class GenerativeSounds {
 
     /** The app's sound in MediaStore for the current stamp, written on first use. */
     synchronized Uri soundUri(String pkg) {
-        String key = "uri:" + stamp() + ":" + pkg + ":" + label(pkg);
+        String key = "uri:" + stamp() + ":" + pkg;
         String saved = mPrefs.getString(key, null);
         if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
         String name = "OpenGlyph " + label(pkg).replaceAll("[\\\\/:*?\"<>|]", "_") + " ("
@@ -152,12 +152,7 @@ final class GenerativeSounds {
         ContentValues done = new ContentValues();
         done.put(MediaStore.Audio.Media.IS_PENDING, 0);
         cr.update(uri, done, null, null);
-        SharedPreferences.Editor e = mPrefs.edit();
-        String samePkg = "uri:" + stamp() + ":" + pkg + ":";
-        for (String old : mPrefs.getAll().keySet()) {
-            if (old.startsWith(samePkg)) e.remove(old); // the app's sound under an older name
-        }
-        e.putString(key, uri.toString()).commit();
+        mPrefs.edit().putString(key, uri.toString()).commit();
         return uri;
     }
 
