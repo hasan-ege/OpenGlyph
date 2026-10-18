@@ -62,8 +62,12 @@ final class RecordingLedController {
         setBlinking(enabled && mDetector.isRecordingVideo());
     }
 
+    /** Whether we have switched it off since start: a blink left over from before is cleared once. */
+    private boolean mClearedOnce;
+
     private void setBlinking(boolean on) {
-        if (on == mLed.isBlinking()) return;
+        if (on == mLed.isBlinking() && (on || mClearedOnce)) return;
+        if (!on) mClearedOnce = true;
         try {
             if (on) mLed.blink(BLINK_ON_MS, BLINK_OFF_MS); else mLed.off();
             Log.i(GlyphService.TAG, "record LED " + (on ? "blinking" : "off"));

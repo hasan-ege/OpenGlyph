@@ -83,5 +83,11 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- The camera app's "Recording light" switch (see RecordLightProvider). -->
+        <provider
+            android:name=".RecordLightProvider"
+            android:authorities="org.openglyph.recordlight"
+            android:directBootAware="true"
+            android:exported="true" />
     </application>
 </manifest>

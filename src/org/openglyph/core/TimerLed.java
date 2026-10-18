@@ -9,9 +9,11 @@ import java.nio.charset.StandardCharsets;
  * A Linux LED class device blinked by the kernel's "timer" trigger, so no thread of ours has
  * to toggle it. Used for the red camera recording LED (/sys/class/leds/red).
  *
- * Only trigger, delay_on and delay_off are written: ueventd hands exactly those to the system
- * user. Brightness stays root-owned and is not needed: the timer trigger blinks at
- * max_brightness when brightness is 0, and removing the trigger switches the LED off.
+ * Only the trigger is required: ueventd hands it to the system user. delay_on/delay_off are
+ * created by the kernel only when the timer trigger is chosen, after ueventd ran, so they are
+ * root-owned and writing them may fail; the kernel's default period (500/500 ms) is used then.
+ * Brightness stays root-owned and is not needed: the timer trigger blinks at max_brightness
+ * when brightness is 0, and removing the trigger switches the LED off.
  */
 public final class TimerLed {
     public static final String RECORD_LED_DIR = "/sys/class/leds/red";
@@ -35,14 +37,18 @@ public final class TimerLed {
         // Selecting the trigger creates delay_on/delay_off and starts with the default period,
         // so it has to come first.
         write(trigger, "timer");
-        write(delayOn, Integer.toString(Math.max(1, onMs)));
-        write(delayOff, Integer.toString(Math.max(1, offMs)));
-        blinking = true;
+        blinking = true; // the kernel blinks from here on, whatever the period writes do
+        try {
+            write(delayOn, Integer.toString(Math.max(1, onMs)));
+            write(delayOff, Integer.toString(Math.max(1, offMs)));
+        } catch (IOException e) {
+            // Root-owned (see above): keep the default period.
+        }
     }
 
     public void off() throws IOException {
-        write(trigger, "none");
         blinking = false;
+        write(trigger, "none");
     }
 
     private static void write(File node, String value) throws IOException {
