@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Essential Key screen: black, with a soft vertical sheen behind the key. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><color android:color="#FF050505" /></item>
+    <item android:gravity="center_horizontal" android:width="220dp">
+        <shape android:shape="rectangle">
+            <gradient android:type="linear" android:angle="0"
+                android:startColor="#00FFFFFF" android:centerColor="#26FFFFFF" android:endColor="#00FFFFFF" />
+        </shape>
+    </item>
+    <item android:bottom="320dp" android:top="40dp" android:gravity="center_horizontal" android:width="80dp">
+        <shape android:shape="rectangle">
+            <gradient android:type="linear" android:angle="0"
+                android:startColor="#00FFFFFF" android:centerColor="#1AFFFFFF" android:endColor="#00FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

@@ -72,5 +72,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- Settings > Essential Key (entry in packages/apps/Settings, by action). -->
+        <activity
+            android:name=".EssentialKeyActivity"
+            android:exported="true"
+            android:label="@string/ek_title"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            <intent-filter>
+                <action android:name="org.openglyph.ESSENTIAL_KEY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

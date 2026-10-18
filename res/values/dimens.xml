@@ -5,4 +5,5 @@
     <dimen name="og_tile_gap">6dp</dimen>
     <dimen name="og_toy_strip_icon">30dp</dimen>
     <dimen name="og_list_icon">56dp</dimen>
+    <dimen name="og_ek_item">150dp</dimen>
 </resources>

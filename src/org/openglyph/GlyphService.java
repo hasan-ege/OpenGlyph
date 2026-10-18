@@ -51,6 +51,9 @@ public final class GlyphService extends Service {
     /** Must match device/nothing/metroid KeyHandler. */
     static final String ACTION_GLYPH_BUTTON = "org.openglyph.action.GLYPH_BUTTON";
     static final String EXTRA_BUTTON_EVENT = "event";
+    /** From the device KeyHandler: the Essential Key ran an action; show its icon. */
+    static final String ACTION_ESSENTIAL_KEY = "org.openglyph.action.ESSENTIAL_KEY";
+    static final String EXTRA_ICON = "icon";
 
     private static volatile GlyphService sInstance;
 
@@ -133,6 +136,8 @@ public final class GlyphService extends Service {
         // Sent by the device KeyHandler in system_server; same uid, so PERMISSION holds for it.
         registerReceiver(mButtonReceiver, new IntentFilter(ACTION_GLYPH_BUTTON), PERMISSION,
                 mHandler, Context.RECEIVER_EXPORTED);
+        registerReceiver(mEssentialKeyReceiver, new IntentFilter(ACTION_ESSENTIAL_KEY), PERMISSION,
+                mHandler, Context.RECEIVER_EXPORTED);
 
         mTelephony = getSystemService(TelephonyManager.class);
         if (mTelephony != null) {
@@ -157,6 +162,7 @@ public final class GlyphService extends Service {
         unregisterReceiver(mUnlockReceiver);
         mChannelWatcher.unregister();
         unregisterReceiver(mButtonReceiver);
+        unregisterReceiver(mEssentialKeyReceiver);
         getContentResolver().unregisterContentObserver(mSettingsObserver);
         mRecordLed.stop();
         mIdleController.stop();
@@ -378,9 +384,13 @@ public final class GlyphService extends Service {
 
     /** Settings preview: shows a picture for a few seconds, over toys and the idle layer. */
     void previewFrame(int[] grid) {
+        previewFrame(grid, 3000);
+    }
+
+    void previewFrame(int[] grid, long ms) {
         showClientFrame(mPreviewToken, grid, 60);
         mHandler.removeCallbacks(mEndPreview);
-        mHandler.postDelayed(mEndPreview, 3000);
+        mHandler.postDelayed(mEndPreview, ms);
     }
 
     private final Runnable mEndPreview = () -> dropClient(mPreviewToken);
@@ -395,6 +405,15 @@ public final class GlyphService extends Service {
         @Override
         public void onChange(boolean selfChange) {
             applySettings();
+        }
+    };
+
+    /** Essential Key feedback: the action's icon on the matrix for a moment. */
+    private final BroadcastReceiver mEssentialKeyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int[] icon = GlyphIcons.render(String.valueOf(intent.getStringExtra(EXTRA_ICON)), Frame.MAX);
+            if (icon != null) previewFrame(icon, 900);
         }
     };
 

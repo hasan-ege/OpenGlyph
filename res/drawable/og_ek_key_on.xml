@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The selected action: the key lights up in Nothing red, with a soft glow. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="74dp" />
+            <solid android:color="#40D71921" />
+        </shape>
+    </item>
+    <item android:left="4dp" android:right="4dp" android:top="4dp" android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="70dp" />
+            <solid android:color="#FF120808" />
+            <stroke android:width="2dp" android:color="#FF4A1A1A" />
+        </shape>
+    </item>
+    <item android:left="13dp" android:right="13dp" android:top="13dp" android:bottom="13dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="62dp" />
+            <gradient android:type="linear" android:angle="0"
+                android:startColor="#FFB0141B" android:centerColor="#FFF0383F" android:endColor="#FFA81219" />
+            <stroke android:width="1dp" android:color="#FFFF8A8E" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="@dimen/og_ek_item"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:id="@+id/ek_key"
+        android:layout_width="140dp"
+        android:layout_height="270dp"
+        android:layout_gravity="center"
+        android:background="@drawable/og_ek_key">
+
+        <ImageView
+            android:id="@+id/ek_icon"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
+</FrameLayout>
