@@ -150,7 +150,7 @@ final class GenerativeSounds {
         ContentValues done = new ContentValues();
         done.put(MediaStore.Audio.Media.IS_PENDING, 0);
         cr.update(uri, done, null, null);
-        mPrefs.edit().putString(key, uri.toString()).apply();
+        mPrefs.edit().putString(key, uri.toString()).commit();
         return uri;
     }
 
@@ -219,7 +219,8 @@ final class GenerativeSounds {
                 boolean ourOld = sound != null && !isDefaultSound(sound);
                 if (ourOld) {
                     if (ours == null) ours = ourFiles();
-                    ourOld = ours.contains(sound.toString());
+                    // Ours, or a media sound whose file is gone (nothing would play): replace.
+                    ourOld = ours.contains(sound.toString()) || isMissingMedia(sound);
                 }
                 if (!isDefaultSound(sound) && !ourOld) continue;
                 if (current == null) current = soundUri(pkg);
@@ -235,11 +236,52 @@ final class GenerativeSounds {
         }
     }
 
-    /** Every launchable app gets its current sound; files no channel needs any more go. */
+    /** A media-store sound whose row no longer exists: the channel would fall back to silence. */
+    private boolean isMissingMedia(Uri sound) {
+        if (!sound.toString().startsWith(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI.toString())) {
+            return false;
+        }
+        // Only a clean "no such row" counts; a failed query (media store not up yet) does not.
+        try (Cursor c = mContext.getContentResolver().query(sound, new String[] {"_id"}, null, null, null)) {
+            return c != null && !c.moveToFirst();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Every installed package with channels, not just apps with a launcher icon: a channel
+     * we gave a sound must never be left pointing at a file we deleted.
+     */
+    private List<String> packages() {
+        List<String> out = new java.util.ArrayList<>();
+        for (ApplicationInfo ai : mContext.getPackageManager().getInstalledApplications(0)) {
+            out.add(ai.packageName);
+        }
+        return out;
+    }
+
+    /** Sounds any channel still plays, so a file in use is never deleted. */
+    private Set<String> inUse(List<String> pkgs) {
+        Set<String> out = new HashSet<>();
+        for (String pkg : pkgs) {
+            try {
+                ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(pkg, 0);
+                for (NotificationChannel ch : channels(pkg, ai.uid)) {
+                    if (ch.getSound() != null) out.add(ch.getSound().toString());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return out;
+    }
+
+    /** Every app gets its current sound; files no channel needs any more go. */
     synchronized void syncAll() {
         if (!unlocked()) return;
         Set<String> ours = ourFiles();
-        for (AppList.App app : AppList.launchable(mContext)) apply(app.pkg, ours);
+        List<String> pkgs = packages();
+        for (String pkg : pkgs) apply(pkg, ours);
         // Keep only this stamp's files.
         String prefix = "uri:" + stamp() + ":";
         Set<String> keep = new HashSet<>();
@@ -249,9 +291,10 @@ final class GenerativeSounds {
             if (entry.getKey().startsWith(prefix)) keep.add((String) entry.getValue());
             else e.remove(entry.getKey());
         }
-        e.apply();
+        e.commit();
+        Set<String> used = inUse(pkgs);
         for (String uri : ourFiles()) {
-            if (keep.contains(uri)) continue;
+            if (keep.contains(uri) || used.contains(uri)) continue;
             try {
                 mContext.getContentResolver().delete(Uri.parse(uri), null, null);
             } catch (Exception ignored) {
@@ -264,16 +307,16 @@ final class GenerativeSounds {
     synchronized void revertAll() {
         if (!unlocked()) return;
         Set<String> ours = ourFiles();
-        for (AppList.App app : AppList.launchable(mContext)) {
+        for (String pkg : packages()) {
             try {
-                ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(app.pkg, 0);
-                for (NotificationChannel ch : channels(app.pkg, ai.uid)) {
+                ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(pkg, 0);
+                for (NotificationChannel ch : channels(pkg, ai.uid)) {
                     if (ch.getSound() == null || !ours.contains(ch.getSound().toString())) continue;
                     ch.setSound(Settings.System.DEFAULT_NOTIFICATION_URI, ch.getAudioAttributes());
-                    nm().updateNotificationChannelForPackage(app.pkg, ai.uid, ch);
+                    nm().updateNotificationChannelForPackage(pkg, ai.uid, ch);
                 }
             } catch (Exception e) {
-                Log.w(TAG, "revert " + app.pkg + " failed", e);
+                Log.w(TAG, "revert " + pkg + " failed", e);
             }
         }
         for (String uri : ours) {
