@@ -30,6 +30,8 @@ public final class GlyphService extends Service {
     private boolean mBinding;
     /** Packages that drew an app frame, cleared when the last client unbinds. */
     private final Set<String> mDrawing = new HashSet<>();
+    /** Packages whose first frame was logged (frame size problems show up there). */
+    private final Set<String> mSeen = new HashSet<>();
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -92,6 +94,13 @@ public final class GlyphService extends Service {
         String pkg = callingPackage();
         IOpenGlyph og = mOpenGlyph;
         if (pkg == null || colors == null) return;
+        synchronized (mSeen) {
+            if (mSeen.add(pkg)) {
+                Log.i(TAG, "first " + (app ? "app" : "toy") + " frame from " + pkg + ": "
+                        + colors.length + " values" + (colors.length != MATRIX_PIXELS
+                        ? " (expected " + MATRIX_PIXELS + ")" : ""));
+            }
+        }
         if (og == null) {
             connect();
             return; // dropped; the SDK sends frames continuously
