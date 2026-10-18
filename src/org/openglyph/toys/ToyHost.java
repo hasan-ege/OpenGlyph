@@ -12,8 +12,8 @@ import org.openglyph.core.Frame;
  *
  * - The first press selects the current toy and shows it; a press while it is shown selects and
  *   shows the next enabled toy. Long press goes to the selected toy ("change").
- * - Selection and visibility are separate. The selected toy stays selected (an SDK toy stays
- *   bound, so a timer keeps counting) until another toy is selected or it is disabled. It is
+ * - A toy is selected (an SDK toy bound) only while it is on screen; when it goes off screen it
+ *   is deselected, so the next press starts it afresh. It is
  *   shown for its {@link Toy#timeoutMs()} after the last press (default {@link #IDLE_MS}), or for
  *   as long as it keeps the screen on.
  */
@@ -102,7 +102,11 @@ public final class ToyHost implements Effect {
     }
 
     public synchronized void onLongPress(long now) {
-        if (selected == null) return;
+        // A press that ran long while nothing is shown still means "show me a toy".
+        if (selected == null || !isVisible(now)) {
+            onTap(now);
+            return;
+        }
         selected.onLongPress(now);
         visibleUntil = now + selected.timeoutMs();
     }
@@ -147,7 +151,11 @@ public final class ToyHost implements Effect {
     @Override public int priority() { return PRIORITY_TOY; }
 
     @Override public synchronized boolean isActive(long now) {
-        return isVisible(now);
+        boolean visible = isVisible(now);
+        // Nothing runs in the background: once off screen the toy is deselected (an SDK toy is
+        // unbound), and the next press starts the toy in turn afresh.
+        if (!visible && selected != null) select(null);
+        return visible;
     }
 
     @Override public synchronized long render(Frame f, long now) {

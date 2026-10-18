@@ -10,6 +10,8 @@ import android.os.RemoteException;
 import android.util.Log;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 import org.openglyph.IOpenGlyph;
@@ -32,6 +34,12 @@ public final class GlyphService extends Service {
     private final Set<String> mDrawing = new HashSet<>();
     /** Packages whose first frame was logged (frame size problems show up there). */
     private final Set<String> mSeen = new HashSet<>();
+    /**
+     * Latest frame per package while OpenGlyph is still connecting. A toy draws its first frame
+     * right after binding, often once only, so it must not be lost while we connect.
+     */
+    private final Map<String, int[]> mPending = new LinkedHashMap<>();
+    private final Map<String, Boolean> mPendingTimeout = new LinkedHashMap<>();
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -75,7 +83,27 @@ public final class GlyphService extends Service {
     private final ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            mOpenGlyph = IOpenGlyph.Stub.asInterface(service);
+            IOpenGlyph og = IOpenGlyph.Stub.asInterface(service);
+            Map<String, int[]> frames;
+            Map<String, Boolean> timeouts;
+            synchronized (mPending) {
+                mOpenGlyph = og;
+                frames = new LinkedHashMap<>(mPending);
+                timeouts = new LinkedHashMap<>(mPendingTimeout);
+                mPending.clear();
+                mPendingTimeout.clear();
+            }
+            try {
+                for (Map.Entry<String, Boolean> e : timeouts.entrySet()) {
+                    og.setPackageTimeout(e.getKey(), e.getValue());
+                }
+                for (Map.Entry<String, int[]> e : frames.entrySet()) {
+                    og.showPackageFrame(e.getKey(), e.getValue());
+                }
+                if (!frames.isEmpty()) Log.i(TAG, "delivered " + frames.size() + " frame(s) held while connecting");
+            } catch (RemoteException e) {
+                mOpenGlyph = null;
+            }
         }
 
         @Override
@@ -101,16 +129,22 @@ public final class GlyphService extends Service {
                         ? " (expected " + MATRIX_PIXELS + ")" : ""));
             }
         }
-        if (og == null) {
-            connect();
-            return; // dropped; the SDK sends frames continuously
-        }
         int[] grid = new int[MATRIX_PIXELS];
         int n = Math.min(colors.length, MATRIX_PIXELS);
         for (int i = 0; i < n; i++) grid[i] = Math.max(0, Math.min(MAX_VALUE, colors[i]));
         if (app) {
             synchronized (mDrawing) {
                 mDrawing.add(pkg);
+            }
+        }
+        if (og == null) {
+            synchronized (mPending) {
+                og = mOpenGlyph;
+                if (og == null) {
+                    mPending.put(pkg, grid); // delivered by onServiceConnected
+                    connect();
+                    return;
+                }
             }
         }
         final long id = Binder.clearCallingIdentity(); // call OpenGlyph as ourselves
@@ -147,8 +181,16 @@ public final class GlyphService extends Service {
 
         @Override public void setGlyphMatrixTimeout(boolean enable) {
             String pkg = callingPackage();
-            IOpenGlyph og = mOpenGlyph;
-            if (pkg == null || og == null) return;
+            if (pkg == null) return;
+            IOpenGlyph og;
+            synchronized (mPending) {
+                og = mOpenGlyph;
+                if (og == null) {
+                    mPendingTimeout.put(pkg, enable);
+                    connect();
+                    return;
+                }
+            }
             final long id = Binder.clearCallingIdentity();
             try {
                 og.setPackageTimeout(pkg, enable);

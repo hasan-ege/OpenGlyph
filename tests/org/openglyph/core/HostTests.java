@@ -88,7 +88,7 @@ public final class HostTests {
         host.onTap(200);
         check(host.selected() == battery, "press while shown selects the next toy");
         check(!host.isActive(200 + org.openglyph.toys.ToyHost.IDLE_MS), "hides after the idle timeout");
-        check(host.selected() == battery, "hiding keeps the selection");
+        check(host.selected() == null, "hiding deselects the toy (nothing runs in the background)");
         host.onTap(20000);
         check(host.selected() == battery && host.isActive(20000), "press after hiding shows the same toy again");
         host.onTap(20050);
@@ -150,18 +150,19 @@ public final class HostTests {
         check(log.subList(1, 4).equals(List.of("action_down Timer", "change Timer", "action_up Timer")),
                 "button events reach the toy as action_down / change / action_up");
 
-        check(!host.isActive(310 + org.openglyph.toys.ToyHost.IDLE_MS + 1) && log.size() == 4,
-                "the matrix times out but the toy stays bound (a timer keeps counting)");
         timer.setNoTimeout(true);
-        check(host.isActive(999999), "setGlyphMatrixTimeout(false) keeps the toy on screen");
+        check(host.isActive(999999) && log.size() == 4, "setGlyphMatrixTimeout(false) keeps the toy on screen");
         timer.setNoTimeout(false);
-
-        host.onTap(100000);     // shows timer again (hidden before: no advance)
-        host.onTap(100100);     // other
-        check(log.get(4).equals("unbind Timer") && log.get(5).equals("bind Other"),
+        check(!host.isActive(999999) && log.get(4).equals("unbind Timer"),
+                "when the matrix times out the toy is unbound");
+        host.onLongPress(1000000); // a long press while nothing shows: show the toy in turn
+        check(log.get(5).equals("bind Timer") && host.isActive(1000001),
+                "the next press starts the same toy afresh");
+        host.onTap(1000100);     // other
+        check(log.get(6).equals("unbind Timer") && log.get(7).equals("bind Other"),
                 "selecting another toy unbinds the old one first");
         int before = log.size();
-        host.onLongPress(100200);
+        host.onLongPress(1000200);
         check(log.size() == before, "no change event for a toy without long-press support");
 
         host.setExtraToys(List.of(timer), 1);
