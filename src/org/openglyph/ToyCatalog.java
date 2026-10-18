@@ -40,12 +40,10 @@ final class ToyCatalog {
 
     static List<Entry> all(Context c) {
         List<Entry> out = new ArrayList<>();
-        out.add(new Entry("clock", c.getString(R.string.toy_clock),
-                c.getString(R.string.toy_clock_summary), true, new Toys.Clock(), null));
-        out.add(new Entry("battery", c.getString(R.string.toy_battery),
-                c.getString(R.string.toy_battery_summary), false, new Toys.Battery(), null));
-        out.add(new Entry("stopwatch", c.getString(R.string.toy_stopwatch),
-                c.getString(R.string.toy_stopwatch_summary), false, new Toys.Stopwatch(), null));
+        for (Toy t : Toys.all()) {
+            out.add(new Entry(t.id(), text(c, "toy_" + t.id()), text(c, "toy_" + t.id() + "_summary"),
+                    t.aodSupported(), t, null));
+        }
         GlyphService service = GlyphService.get();
         if (service != null) {
             for (RemoteToy t : service.sdkToys()) {
@@ -55,6 +53,11 @@ final class ToyCatalog {
             }
         }
         return out;
+    }
+
+    private static CharSequence text(Context c, String name) {
+        int id = c.getResources().getIdentifier(name, "string", c.getPackageName());
+        return id == 0 ? name : c.getText(id);
     }
 
     static Entry byId(List<Entry> entries, String id) {

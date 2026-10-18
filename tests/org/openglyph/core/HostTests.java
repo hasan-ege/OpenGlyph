@@ -39,6 +39,8 @@ public final class HostTests {
         recordingDetector();
         toys();
         nothingStyleFeatures();
+        stockToys();
+        generative();
         remoteToys();
         System.out.println(failures == 0 ? "\nALL PASSED" : "\n" + failures + " FAILED");
         System.exit(failures == 0 ? 0 : 1);
@@ -71,7 +73,7 @@ public final class HostTests {
         check(!f.isDark() && !litOutsideMatrix(f), "battery 7% fits");
 
         sw.onLongPress(1000);
-        check(sw.isRunning() && sw.keepsScreenOn(), "long press starts the stopwatch");
+        check(sw.isRunning() && sw.keepsScreenOn(2000), "long press starts the stopwatch");
         check(sw.elapsedMs(3500) == 2500, "stopwatch counts");
         sw.onLongPress(4000);
         check(!sw.isRunning() && sw.elapsedMs(9000) == 3000, "second long press stops it");
@@ -282,6 +284,109 @@ public final class HostTests {
         idle.setEssential(null);
         check(!idle.isActive(0), "idle layer off again");
         check(new Effects.NotificationPulse().priority() > idle.priority(), "notifications draw over idle");
+    }
+
+    static void stockToys() {
+        java.util.List<org.openglyph.toys.Toy> all = org.openglyph.toys.Toys.all();
+        java.util.List<String> ids = new ArrayList<>();
+        for (org.openglyph.toys.Toy t : all) ids.add(t.id());
+        check(ids.equals(java.util.List.of("clock", "battery", "solar", "mirror", "bottle", "rps",
+                "magic8", "stopwatch", "leveller", "compass", "moon", "fly", "off")),
+                "the stock Phone (3) toy set, Off last: " + ids);
+        org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
+        ctx.hour = 21; ctx.minute = 58; ctx.batteryPercent = 64;
+        ctx.epochMs = 1760781600000L; // 2025-10-18 10:00 UTC
+        ctx.utcOffsetHours = 3;
+        ctx.hasGravity = true; ctx.gx = 3; ctx.gy = -2; ctx.gz = -9;
+        ctx.hasHeading = true; ctx.heading = 90;
+        for (org.openglyph.toys.Toy t : all) {
+            Frame f = new Frame();
+            t.onLongPress(1000);
+            t.render(f, 1500, ctx);
+            t.render(f, 3000, ctx);
+            check(t.id().equals("off") ? f.isDark() : !f.isDark(), "toy " + t.id() + " draws");
+        }
+        Frame clock = new Frame();
+        new org.openglyph.toys.Toys.Clock().render(clock, 0, ctx);
+        System.out.println("\n7-segment clock 21:58:\n" + clock.toAscii());
+
+        // Sun and moon
+        double noonIst = org.openglyph.toys.Sky.sunElevation(41.0, 29.0, 1760781600000L); // 13:00 local
+        double midnightIst = org.openglyph.toys.Sky.sunElevation(41.0, 29.0, 1760734800000L); // 00:00 local
+        check(noonIst > 30 && noonIst < 50 && midnightIst < -30,
+                "sun elevation in Istanbul mid-October: noon " + (int) noonIst + ", midnight " + (int) midnightIst);
+        double full = org.openglyph.toys.Sky.moonPhase(1759808820000L); // full moon 2025-10-07 03:47 UTC
+        check(Math.abs(full - 0.5) < 0.03, "moon phase on a known full moon: " + full);
+        check(Math.abs(org.openglyph.toys.Sky.moonPhase(1761049500000L)) < 0.03
+                || org.openglyph.toys.Sky.moonPhase(1761049500000L) > 0.97, "moon phase on a known new moon");
+
+        // Bottle spins and stops; Feed The Fly eats and scores
+        org.openglyph.toys.Toys.Bottle bottle = new org.openglyph.toys.Toys.Bottle();
+        bottle.onLongPress(0);
+        check(bottle.keepsScreenOn(1000) && !bottle.keepsScreenOn(4000), "bottle spins for a few seconds");
+        org.openglyph.toys.Toys.Leveller lev = new org.openglyph.toys.Toys.Leveller();
+        Frame lf = new Frame();
+        ctx.gx = 0; ctx.gy = 0;
+        lev.render(lf, 0, ctx);
+        check(lf.get(12, 12) == Frame.MAX, "level: bubble bright in the centre");
+        check(new org.openglyph.toys.Toys.Compass().sensors() == org.openglyph.toys.Toy.SENSOR_HEADING
+                && new org.openglyph.toys.Toys.Mirror().sensors() == org.openglyph.toys.Toy.SENSOR_CAMERA,
+                "sensor toys ask for their sensors");
+        check(new org.openglyph.toys.Toys.Clock().aodSupported() && new org.openglyph.toys.Toys.MoonPhase().aodSupported()
+                && !new org.openglyph.toys.Toys.Bottle().aodSupported(), "clock and moon can be always-on");
+        org.openglyph.toys.ToyHost host = new org.openglyph.toys.ToyHost(() -> ctx,
+                all.toArray(new org.openglyph.toys.Toy[0]));
+        host.setOrder(java.util.List.of("leveller"));
+        host.onTap(0);
+        check(host.neededSensors(1000) == org.openglyph.toys.Toy.SENSOR_GRAVITY
+                && host.isActive(30000) && !host.isActive(61000) && host.neededSensors(61000) == 0,
+                "sensor toys stay a minute, then their sensors stop");
+    }
+
+    static void generative() {
+        long seedA = 0x1234_5678_9abcL, seedB = 0x0fed_cba9_8765L;
+        Generative.Theme wa = Generative.theme(seedA, "com.whatsapp");
+        Generative.Theme wa2 = Generative.theme(seedA, "com.whatsapp");
+        Generative.Theme tg = Generative.theme(seedA, "org.telegram.messenger");
+        Generative.Theme waB = Generative.theme(seedB, "com.whatsapp");
+        check(java.util.Arrays.equals(wa.notesMidi, wa2.notesMidi) && wa.motif == wa2.motif
+                && java.util.Arrays.equals(wa.synth(22050), wa2.synth(22050)), "same device + app: same sound and light");
+        check(!java.util.Arrays.equals(wa.synth(8000), tg.synth(8000)), "another app sounds different");
+        check(!java.util.Arrays.equals(wa.synth(8000), waB.synth(8000)), "another device sounds different");
+        java.util.Set<Integer> motifs = new java.util.HashSet<>();
+        for (int i = 0; i < 200; i++) motifs.add(Generative.theme(seedA, "app" + i).motif);
+        check(motifs.size() == Generative.MOTIFS, "all motifs are used: " + motifs);
+        for (int i = 0; i < 40; i++) {
+            Generative.Theme th = Generative.theme(seedB, "pkg." + i);
+            short[] pcm = th.synth(44100);
+            int peak = 0;
+            for (short v : pcm) peak = Math.max(peak, Math.abs(v));
+            check(pcm.length > 44100 / 2 && pcm.length < 44100 * 2 && peak > 15000 && peak < 32767,
+                    "sound " + i + " is 0.5-2 s and not clipped (peak " + peak + ")");
+            Frame f = new Frame();
+            th.render(f, 60);
+            Frame later = new Frame();
+            th.render(later, th.durationMs() + 10);
+            check(!f.isDark() && later.isDark(), "animation " + i + " (motif " + th.motif + ") lights up, then ends");
+        }
+        byte[] wav = Generative.wav(new short[] {1, -1}, 44100);
+        check(wav.length == 48 && wav[0] == 'R' && wav[8] == 'W' && wav[40] == 4, "WAV header");
+        Effects.NotificationPulse pulse = new Effects.NotificationPulse();
+        pulse.trigger(0, wa);
+        check(pulse.isActive(wa.durationMs() - 1) && !pulse.isActive(wa.durationMs() + 1),
+                "generative pulse lasts as long as its melody");
+        Effects.AudioBars bars = new Effects.AudioBars();
+        float[] lv = new float[25];
+        for (int i = 0; i < 25; i++) lv[i] = i / 24f;
+        bars.setLevels(lv, 0);
+        Frame bf = new Frame();
+        bars.render(bf, 10);
+        check(bars.isActive(100) && !bars.isActive(1000) && bf.get(12, 12) > 0 && bf.get(24, 12) > 0
+                && bf.get(0, 13) == 0 && bf.get(22, 7) > 0, "music bars: per-column height, quiet when stale");
+        System.out.println("\nMusic bars:\n" + bf.toAscii());
+        Frame g = new Frame();
+        wa.render(g, wa.onsetsMs[1] + 120);
+        System.out.println("Generative com.whatsapp (motif " + wa.motif + "):\n" + g.toAscii());
     }
 
     static void timerLed() throws Exception {

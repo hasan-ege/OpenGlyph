@@ -46,6 +46,11 @@ public final class MatrixLayout {
 
     private MatrixLayout() {}
 
+    /** LEDs in column x (the matrix is round, so columns match rows). */
+    public static int columnLength(int x) {
+        return ROW_LENGTHS[x];
+    }
+
     public static boolean exists(int x, int y) {
         return x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && GRID_TO_LED[y * WIDTH + x] >= 0;
     }

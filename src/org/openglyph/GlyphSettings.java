@@ -35,15 +35,19 @@ final class GlyphSettings {
     /** Old essential-apps setting ("pkg,pkg"); read once to seed the first rule. */
     static final String ESSENTIAL_APPS = "open_glyph_essential_apps";
     static final String ESSENTIAL_RULES = "open_glyph_essential_rules"; // EssentialRule.format
-    static final String DEFAULT_PATTERN = "open_glyph_pattern";      // RING|SWEEP|DOT|FLASH
+    static final String DEFAULT_PATTERN = "open_glyph_pattern";      // GENERATIVE|RING|SWEEP|DOT|FLASH
     static final String APP_PATTERNS = "open_glyph_app_patterns";    // "pkg=RING;pkg=SWEEP"
     static final String AOD_TOY = "open_glyph_aod_toy";              // "" = clock, else SDK toy id
-    static final String TOY_ORDER = "open_glyph_toy_order";          // active toy ids, "a,b,c"
+    /** Active toy ids in Glyph Button order, "a,b,c" ("off" is implied last). v2: stock set. */
+    static final String TOY_ORDER = "open_glyph_toy_order_v2";
+    static final String MUSIC = "open_glyph_music";                  // 1/0, default 0
+    static final String GEN_SOUNDS = "open_glyph_generative_sounds"; // 1/0, default 0
+    static final String SEED = "open_glyph_seed";                    // hex, random per device
 
     static final String[] ALL = {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
-        APP_PATTERNS, DEFAULT_PATTERN, AOD_TOY, TOY_ORDER,
+        APP_PATTERNS, DEFAULT_PATTERN, AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS,
     };
 
     private GlyphSettings() {}
@@ -77,26 +81,26 @@ final class GlyphSettings {
         return TOY_PREFIX + toyId;
     }
 
-    static Set<String> enabledToys(ContentResolver cr, Iterable<String> toyIds) {
-        Set<String> out = new HashSet<>();
-        for (String id : toyIds) if (flag(cr, toyKey(id))) out.add(id);
-        return out;
-    }
-
     /**
-     * Active toys in Glyph Button order. Until the user arranges them in Settings, every toy
-     * whose own switch is on (the older per-toy setting, default on) in the given order.
+     * Active toys in Glyph Button order, without "off". Until the user arranges them in
+     * Settings: every built-in toy, in the default order (SDK toys are added by the user).
      */
-    static List<String> activeToys(ContentResolver cr, List<String> allIds) {
+    static List<String> activeToys(ContentResolver cr) {
         String order = Settings.Secure.getString(cr, TOY_ORDER);
         List<String> out = new ArrayList<>();
         if (order == null) {
-            for (String id : allIds) if (flag(cr, toyKey(id))) out.add(id);
+            for (org.openglyph.toys.Toy t : org.openglyph.toys.Toys.all()) {
+                if (!OFF.equals(t.id())) out.add(t.id());
+            }
             return out;
         }
-        for (String id : order.split(",")) if (!id.isEmpty() && !out.contains(id)) out.add(id);
+        for (String id : order.split(",")) {
+            if (!id.isEmpty() && !OFF.equals(id) && !out.contains(id)) out.add(id);
+        }
         return out;
     }
+
+    static final String OFF = "off";
 
     static void setActiveToys(ContentResolver cr, List<String> ids) {
         Settings.Secure.putString(cr, TOY_ORDER, String.join(",", ids));

@@ -17,7 +17,7 @@
             android:title="@string/settings_default_pattern"
             android:entries="@array/default_pattern_entries"
             android:entryValues="@array/default_pattern_values"
-            android:defaultValue="RING"
+            android:defaultValue="GENERATIVE"
             app:useSimpleSummaryProvider="true"
             android:persistent="false" />
 
@@ -31,6 +31,24 @@
             android:title="@string/settings_test"
             android:summary="@string/settings_test_summary"
             android:icon="@drawable/ic_og_play" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="generative"
+        android:title="@string/settings_generative_category">
+
+        <SwitchPreferenceCompat
+            android:key="open_glyph_generative_sounds"
+            android:title="@string/settings_generative_sounds"
+            android:summary="@string/settings_generative_sounds_summary"
+            android:persistent="false" />
+
+        <ListPreference
+            android:key="generative_preview"
+            android:title="@string/settings_generative_preview"
+            android:summary="@string/settings_generative_preview_summary"
+            android:icon="@drawable/ic_og_play"
+            android:persistent="false" />
     </PreferenceCategory>
 
     <com.android.settingslib.widget.FooterPreference

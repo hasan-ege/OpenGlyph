@@ -57,6 +57,8 @@ public final class GlyphSettingsFragment extends GlyphFragment {
         }
         tile(GlyphSettings.FLIP).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP),
                 (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.FLIP, on));
+        tile(GlyphSettings.MUSIC).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.MUSIC),
+                (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.MUSIC, on));
         tile(GlyphSettings.AOD).setSwitch(false, (t, on) -> {
             String mode = GlyphSettings.string(cr, GlyphSettings.AOD, "OFF");
             if (on && "OFF".equals(mode)) mode = "ALWAYS";
@@ -102,14 +104,13 @@ public final class GlyphSettingsFragment extends GlyphFragment {
                 .setValue(GlyphSettings.brightness(cr));
         for (String key : FLAGS) tile(key).setChecked(GlyphSettings.flag(cr, key));
         tile(GlyphSettings.FLIP).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP));
+        tile(GlyphSettings.MUSIC).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.MUSIC));
 
         // Toys: a strip of the active toys, like the stock tile.
         List<ToyCatalog.Entry> toys = ToyCatalog.all(c);
-        List<String> ids = new ArrayList<>();
-        for (ToyCatalog.Entry e : toys) ids.add(e.id);
         List<Drawable> strip = new ArrayList<>();
         int size = getResources().getDimensionPixelSize(R.dimen.og_toy_strip_icon);
-        for (String id : GlyphSettings.activeToys(cr, ids)) {
+        for (String id : GlyphSettings.activeToys(cr)) {
             ToyCatalog.Entry e = ToyCatalog.byId(toys, id);
             if (e != null && strip.size() < 5) strip.add(ToyCatalog.icon(e, size));
         }

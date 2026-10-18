@@ -30,12 +30,6 @@
     <string name="settings_footer">Press the Glyph Button (under the matrix) to show a toy; press again for the next one. With Glyph Toys off it shows the battery level.</string>
 
     <!-- Glyph Toys -->
-    <string name="toy_clock">Digital clock</string>
-    <string name="toy_clock_summary">Take a quick glance at the time</string>
-    <string name="toy_battery">Battery</string>
-    <string name="toy_battery_summary">Half empty or half full?</string>
-    <string name="toy_stopwatch">Stopwatch</string>
-    <string name="toy_stopwatch_summary">Long press: start, stop, reset</string>
     <string name="toy_sdk_summary">Glyph Matrix SDK toy</string>
     <string name="toys_try">Show on matrix</string>
     <string name="toys_manage">Manage toys</string>
@@ -143,4 +137,38 @@
     <string name="days_weekdays">Weekdays</string>
     <string name="days_weekend">Weekends</string>
     <string name="days_never">Never</string>
+    <string name="toy_clock">Digital Clock</string>
+    <string name="toy_clock_summary">The time in 7-segment digits</string>
+    <string name="toy_battery">Battery</string>
+    <string name="toy_battery_summary">Battery level, breathing while charging</string>
+    <string name="toy_solar">Solar Path</string>
+    <string name="toy_solar_summary">Where the sun is on today\'s path across the sky</string>
+    <string name="toy_mirror">Glyph Mirror</string>
+    <string name="toy_mirror_summary">Rear camera on the matrix for selfies. Long press to take the photo</string>
+    <string name="toy_bottle">Spin the Bottle</string>
+    <string name="toy_bottle_summary">Long press to spin. Truth or dare?</string>
+    <string name="toy_rps">Rock, Paper, Scissors</string>
+    <string name="toy_rps_summary">Long press or shake three times to play</string>
+    <string name="toy_magic8">Magic 8 Ball</string>
+    <string name="toy_magic8_summary">Ask a question, then long press or shake</string>
+    <string name="toy_stopwatch">Stopwatch</string>
+    <string name="toy_stopwatch_summary">Long press: start, stop, reset</string>
+    <string name="toy_leveller">Leveller</string>
+    <string name="toy_leveller_summary">A bubble level. Lights up when the surface is flat</string>
+    <string name="toy_compass">Compass</string>
+    <string name="toy_compass_summary">The needle points north</string>
+    <string name="toy_moon">Moon Phase</string>
+    <string name="toy_moon_summary">Tonight\'s moon</string>
+    <string name="toy_fly">Feed The Fly</string>
+    <string name="toy_fly_summary">Long press, then tilt to eat as much as you can in 30 seconds</string>
+    <string name="toy_off">Off</string>
+    <string name="toy_off_summary">Turns the matrix off. Always last; cannot be moved or removed</string>
+    <string name="settings_music">Music visualisation</string>
+    <string name="settings_music_short">Bars for the speaker\'s sound</string>
+    <string name="pattern_generative">Generative</string>
+    <string name="settings_generative_category">Generative</string>
+    <string name="settings_generative_sounds">Generative notification sounds</string>
+    <string name="settings_generative_sounds_summary">Each app gets its own sound, made from this phone\'s seed and the app. Only channels on the default sound are changed; switching off restores them</string>
+    <string name="settings_generative_preview">Preview an app</string>
+    <string name="settings_generative_preview_summary">Plays the app\'s sound and animation</string>
 </resources>

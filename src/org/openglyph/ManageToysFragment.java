@@ -30,6 +30,7 @@ public final class ManageToysFragment extends Fragment {
     private final List<ToyCatalog.Entry> mActive = new ArrayList<>();
     private final List<ToyCatalog.Entry> mInactive = new ArrayList<>();
     private ItemTouchHelper mDrag;
+    private ToyCatalog.Entry mOff;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
@@ -54,6 +55,7 @@ public final class ManageToysFragment extends Fragment {
                     @NonNull RecyclerView.ViewHolder to) {
                 if (to.getItemViewType() != ACTIVE) return false;
                 int a = from.getBindingAdapterPosition() - 1, b = to.getBindingAdapterPosition() - 1;
+                if (mActive.get(a) == mOff || mActive.get(b) == mOff) return false;
                 Collections.swap(mActive, a, b);
                 mAdapter.notifyItemMoved(a + 1, b + 1);
                 return true;
@@ -81,27 +83,34 @@ public final class ManageToysFragment extends Fragment {
 
     private void load() {
         List<ToyCatalog.Entry> all = ToyCatalog.all(requireContext());
-        List<String> ids = new ArrayList<>();
-        for (ToyCatalog.Entry e : all) ids.add(e.id);
         mActive.clear();
         mInactive.clear();
-        for (String id : GlyphSettings.activeToys(requireContext().getContentResolver(), ids)) {
+        for (String id : GlyphSettings.activeToys(requireContext().getContentResolver())) {
             ToyCatalog.Entry e = ToyCatalog.byId(all, id);
             if (e != null) mActive.add(e);
         }
-        for (ToyCatalog.Entry e : all) if (!mActive.contains(e)) mInactive.add(e);
+        for (ToyCatalog.Entry e : all) {
+            if (GlyphSettings.OFF.equals(e.id)) mOff = e;
+            else if (!mActive.contains(e)) mInactive.add(e);
+        }
+        if (mOff != null) mActive.add(mOff); // always last, fixed
         mAdapter.notifyDataSetChanged();
     }
 
     private void save() {
         ContentResolver cr = requireContext().getContentResolver();
         List<String> ids = new ArrayList<>();
-        for (ToyCatalog.Entry e : mActive) ids.add(e.id);
+        for (ToyCatalog.Entry e : mActive) if (e != mOff) ids.add(e.id);
         GlyphSettings.setActiveToys(cr, ids);
     }
 
     private void toggle(ToyCatalog.Entry e) {
-        if (mActive.remove(e)) mInactive.add(0, e); else if (mInactive.remove(e)) mActive.add(e);
+        if (e == mOff) return;
+        if (mActive.remove(e)) {
+            mInactive.add(0, e);
+        } else if (mInactive.remove(e)) {
+            mActive.add(mOff != null ? mActive.size() - 1 : mActive.size(), e);
+        }
         save();
         mAdapter.notifyDataSetChanged();
     }
@@ -143,13 +152,15 @@ public final class ManageToysFragment extends Fragment {
             ((ImageView) v.findViewById(R.id.row_icon)).setImageDrawable(ToyCatalog.icon(e, size));
             ((TextView) v.findViewById(R.id.row_title)).setText(e.label);
             ((TextView) v.findViewById(R.id.row_summary)).setText(e.summary);
+            boolean fixed = e == mOff;
             View handle = v.findViewById(R.id.row_drag);
-            handle.setVisibility(type == ACTIVE ? View.VISIBLE : View.INVISIBLE);
+            handle.setVisibility(type == ACTIVE && !fixed ? View.VISIBLE : View.INVISIBLE);
             handle.setOnTouchListener((h, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mDrag.startDrag(holder);
                 return false;
             });
             ImageButton action = v.findViewById(R.id.row_action);
+            action.setVisibility(fixed ? View.INVISIBLE : View.VISIBLE);
             action.setImageResource(type == ACTIVE
                     ? R.drawable.ic_og_remove_circle : R.drawable.ic_og_add_circle);
             action.setContentDescription(v.getContext().getString(type == ACTIVE

@@ -93,7 +93,7 @@ public final class RemoteToy implements Toy {
         this.noTimeout = noTimeout;
     }
 
-    @Override public boolean keepsScreenOn() {
+    @Override public boolean keepsScreenOn(long now) {
         return noTimeout;
     }
 

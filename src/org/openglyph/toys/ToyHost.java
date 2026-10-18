@@ -14,7 +14,8 @@ import org.openglyph.core.Frame;
  *   shows the next enabled toy. Long press goes to the selected toy ("change").
  * - Selection and visibility are separate. The selected toy stays selected (an SDK toy stays
  *   bound, so a timer keeps counting) until another toy is selected or it is disabled. It is
- *   shown for {@link #IDLE_MS} after the last press, or for as long as it keeps the screen on.
+ *   shown for its {@link Toy#timeoutMs()} after the last press (default {@link #IDLE_MS}), or for
+ *   as long as it keeps the screen on.
  */
 public final class ToyHost implements Effect {
     public static final long IDLE_MS = 5000;
@@ -76,7 +77,7 @@ public final class ToyHost implements Effect {
         int i = enabled.indexOf(t);
         if (i >= 0) index = i;
         select(t);
-        visibleUntil = now + IDLE_MS;
+        visibleUntil = now + selected.timeoutMs();
     }
 
     /** Keeps the position on the same toy where possible; drops a selection that went away. */
@@ -97,13 +98,13 @@ public final class ToyHost implements Effect {
         if (enabled.isEmpty()) return;
         if (selected != null && isVisible(now)) index = (index + 1) % enabled.size();
         select(current());
-        visibleUntil = now + IDLE_MS;
+        visibleUntil = now + selected.timeoutMs();
     }
 
     public synchronized void onLongPress(long now) {
         if (selected == null) return;
         selected.onLongPress(now);
-        visibleUntil = now + IDLE_MS;
+        visibleUntil = now + selected.timeoutMs();
     }
 
     public synchronized void onButtonDown(long now) {
@@ -135,7 +136,12 @@ public final class ToyHost implements Effect {
 
     private boolean isVisible(long now) {
         if (selected == null) return false;
-        return (visibleUntil != Long.MIN_VALUE && now < visibleUntil) || selected.keepsScreenOn();
+        return (visibleUntil != Long.MIN_VALUE && now < visibleUntil) || selected.keepsScreenOn(now);
+    }
+
+    /** Toy.SENSOR_* flags the toy on screen needs now; 0 when nothing is shown. */
+    public synchronized int neededSensors(long now) {
+        return isVisible(now) ? selected.sensors() : 0;
     }
 
     @Override public int priority() { return PRIORITY_TOY; }
@@ -150,7 +156,7 @@ public final class ToyHost implements Effect {
         long interval = selected.frameIntervalMs();
         long untilIdle = visibleUntil - now;
         // Wake up for the idle timeout even when the picture is static.
-        if (!selected.keepsScreenOn() && untilIdle > 0) {
+        if (!selected.keepsScreenOn(now) && untilIdle > 0) {
             return interval < 0 ? untilIdle : Math.min(interval, untilIdle);
         }
         return interval;

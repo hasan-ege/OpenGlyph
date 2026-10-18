@@ -14,6 +14,7 @@
     <!-- Per-app pattern: DEFAULT follows the default pattern setting. -->
     <string-array name="pattern_entries">
         <item>@string/pattern_default</item>
+        <item>@string/pattern_generative</item>
         <item>@string/pattern_ring</item>
         <item>@string/pattern_sweep</item>
         <item>@string/pattern_dot</item>
@@ -21,18 +22,21 @@
     </string-array>
     <string-array name="pattern_values" translatable="false">
         <item>DEFAULT</item>
+        <item>GENERATIVE</item>
         <item>RING</item>
         <item>SWEEP</item>
         <item>DOT</item>
         <item>FLASH</item>
     </string-array>
     <string-array name="default_pattern_entries">
+        <item>@string/pattern_generative</item>
         <item>@string/pattern_ring</item>
         <item>@string/pattern_sweep</item>
         <item>@string/pattern_dot</item>
         <item>@string/pattern_flash</item>
     </string-array>
     <string-array name="default_pattern_values" translatable="false">
+        <item>GENERATIVE</item>
         <item>RING</item>
         <item>SWEEP</item>
         <item>DOT</item>

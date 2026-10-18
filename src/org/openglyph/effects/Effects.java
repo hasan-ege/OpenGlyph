@@ -2,6 +2,7 @@ package org.openglyph.effects;
 
 import org.openglyph.core.Effect;
 import org.openglyph.core.Frame;
+import org.openglyph.core.Generative;
 import org.openglyph.core.MatrixLayout;
 
 /** Built-in effects. They only know time and state; Android wiring lives in the service. */
@@ -17,7 +18,8 @@ public final class Effects {
 
     /** How a notification looks; chosen per app (see the service's pattern setting). */
     public enum Pattern {
-        RING,  // two outward rings (default)
+        GENERATIVE, // the app's own animation from the device seed (default)
+        RING,  // two outward rings
         SWEEP, // a radius sweeping round once
         DOT,   // centre dot blinking twice
         FLASH; // whole matrix flashing twice
@@ -37,24 +39,43 @@ public final class Effects {
         static final long DURATION_MS = 1600;
         private volatile long startMs = Long.MIN_VALUE;
         private volatile Pattern pattern = Pattern.RING;
+        private volatile Generative.Theme theme;
 
         public void trigger(long nowMs) {
             trigger(nowMs, Pattern.RING);
         }
 
         public void trigger(long nowMs, Pattern pattern) {
-            this.pattern = pattern;
+            this.pattern = pattern == Pattern.GENERATIVE ? Pattern.RING : pattern;
+            theme = null;
             startMs = nowMs;
+        }
+
+        /** A generative notification: the app's own animation, as long as its melody. */
+        public void trigger(long nowMs, Generative.Theme theme) {
+            this.pattern = Pattern.GENERATIVE;
+            this.theme = theme;
+            startMs = nowMs;
+        }
+
+        private long duration() {
+            Generative.Theme th = theme;
+            return pattern == Pattern.GENERATIVE && th != null ? th.durationMs() : DURATION_MS;
         }
 
         @Override public int priority() { return PRIORITY_NOTIFICATION; }
 
         @Override public boolean isActive(long now) {
-            return startMs != Long.MIN_VALUE && now >= startMs && now - startMs < DURATION_MS;
+            return startMs != Long.MIN_VALUE && now >= startMs && now - startMs < duration();
         }
 
         @Override public long render(Frame f, long now) {
             long t = now - startMs;
+            Generative.Theme th = theme;
+            if (pattern == Pattern.GENERATIVE && th != null) {
+                th.render(f, t);
+                return 33;
+            }
             switch (pattern) {
                 case SWEEP -> sweep(f, t / (double) DURATION_MS);
                 case DOT -> dot(f, t);
@@ -200,6 +221,51 @@ public final class Effects {
                 f.copyFrom(frame);
             }
             return -1;
+        }
+    }
+
+    /**
+     * Music visualisation: 25 bars, one per column, mirrored about the middle row like a
+     * waveform. Levels come from the speaker output; the layer goes quiet when they stop.
+     */
+    public static final class AudioBars implements Effect {
+        static final long STALE_MS = 400;
+        private final float[] levels = new float[MatrixLayout.WIDTH];
+        private volatile long updatedMs = Long.MIN_VALUE;
+
+        /** Levels 0..1, one per column (left to right as seen on the matrix). */
+        public void setLevels(float[] in, long nowMs) {
+            synchronized (levels) {
+                for (int i = 0; i < levels.length && i < in.length; i++) {
+                    levels[i] = Math.max(0, Math.min(1, in[i]));
+                }
+            }
+            updatedMs = nowMs;
+        }
+
+        public void stop() {
+            updatedMs = Long.MIN_VALUE;
+        }
+
+        @Override public int priority() { return PRIORITY_MUSIC; }
+
+        @Override public boolean isActive(long now) {
+            return updatedMs != Long.MIN_VALUE && now - updatedMs < STALE_MS;
+        }
+
+        @Override public long render(Frame f, long now) {
+            synchronized (levels) {
+                for (int x = 0; x < MatrixLayout.WIDTH; x++) {
+                    int half = (MatrixLayout.columnLength(x) - 1) / 2;
+                    int h = Math.round(levels[x] * half);
+                    for (int dy = -h; dy <= h; dy++) {
+                        // Brightest at the centre line, dimmer towards the tips.
+                        double fall = h == 0 ? 1 : 1 - 0.55 * Math.abs(dy) / (double) h;
+                        f.set(x, 12 + dy, (int) (Frame.MAX * fall));
+                    }
+                }
+            }
+            return 33;
         }
     }
 }

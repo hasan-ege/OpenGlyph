@@ -87,10 +87,19 @@
             app:tileSwitch="true" />
 
         <org.openglyph.TilePreference
+            android:key="open_glyph_music"
+            android:title="@string/settings_music"
+            android:summary="@string/settings_music_short"
+            android:icon="@drawable/ic_og_music"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
             android:key="open_glyph_record_led"
             android:title="@string/settings_record_led"
             android:summary="@string/settings_record_led_summary"
             android:icon="@drawable/ic_og_record"
+            app:tileHalf="true"
             app:tileSwitch="true" />
     </PreferenceCategory>
 

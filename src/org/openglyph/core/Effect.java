@@ -7,6 +7,7 @@ package org.openglyph.core;
 public interface Effect {
     int PRIORITY_IDLE = 5;  // always-on clock / essential-notification dot
     int PRIORITY_TOY = 10;
+    int PRIORITY_MUSIC = 15;
     int PRIORITY_CHARGING = 30;
     int PRIORITY_NOTIFICATION = 50;
     int PRIORITY_CALL = 90;

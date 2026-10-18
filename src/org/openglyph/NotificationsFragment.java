@@ -29,13 +29,36 @@ public final class NotificationsFragment extends GlyphFragment {
         findPreference("patterns").setEnabled(main.isChecked());
 
         ListPreference pattern = findPreference(GlyphSettings.DEFAULT_PATTERN);
-        pattern.setValue(GlyphSettings.string(cr, GlyphSettings.DEFAULT_PATTERN, "RING"));
+        pattern.setValue(GlyphSettings.string(cr, GlyphSettings.DEFAULT_PATTERN, "GENERATIVE"));
         pattern.setOnPreferenceChangeListener((p, value) -> {
             Settings.Secure.putString(cr, GlyphSettings.DEFAULT_PATTERN, (String) value);
             return true;
         });
 
         link("app_patterns", AppPatternsFragment::new);
+
+        androidx.preference.TwoStatePreference sounds = findPreference(GlyphSettings.GEN_SOUNDS);
+        sounds.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.GEN_SOUNDS));
+        sounds.setOnPreferenceChangeListener((p, value) -> {
+            GlyphSettings.setFlag(cr, GlyphSettings.GEN_SOUNDS, (Boolean) value);
+            return true;
+        });
+
+        ListPreference preview = findPreference("generative_preview");
+        java.util.List<AppList.App> apps = AppList.launchable(requireContext());
+        CharSequence[] labels = new CharSequence[apps.size()];
+        CharSequence[] pkgs = new CharSequence[apps.size()];
+        for (int i = 0; i < apps.size(); i++) {
+            labels[i] = apps.get(i).label;
+            pkgs[i] = apps.get(i).pkg;
+        }
+        preview.setEntries(labels);
+        preview.setEntryValues(pkgs);
+        preview.setOnPreferenceChangeListener((p, value) -> {
+            GlyphService running = GlyphService.get();
+            if (running != null) running.previewGenerative((String) value);
+            return false; // a one-shot action, nothing to keep selected
+        });
         findPreference("test").setOnPreferenceClickListener(p -> {
             GlyphService running = GlyphService.get();
             if (running != null) running.testPulse();

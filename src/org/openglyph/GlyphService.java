@@ -64,8 +64,16 @@ public final class GlyphService extends Service {
     private TelephonyManager mTelephony;
     private RecordingLedController mRecordLed;
     private final ToyHost mToys = new ToyHost(this::toyContext,
-            new Toys.Clock(), new Toys.Battery(), new Toys.Stopwatch());
-    private static final int BUILT_IN_TOYS = 3;
+            Toys.all().toArray(new Toy[0]));
+    private static final int BUILT_IN_TOYS = Toys.all().size();
+    private final Effects.AudioBars mMusicBars = new Effects.AudioBars();
+    private MusicVisualizer mMusic;
+    private ToySensors mToySensors;
+    private MirrorCamera mMirror;
+    private GenerativeSounds mSounds;
+    private final java.util.concurrent.ExecutorService mBackground =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private Boolean mGenSoundsOn;
     private NothingToyBridge mToyBridge;
     /** App frames from Nothing SDK apps (OpenGlyphCompat), keyed by package. */
     private final Map<String, IBinder> mPackageTokens = new HashMap<>();
@@ -91,11 +99,14 @@ public final class GlyphService extends Service {
         mRenderer.add(mCall);
         mRenderer.add(mToys);
         mRenderer.add(mIdle);
+        mRenderer.add(mMusicBars);
+        mToySensors = new ToySensors(this, mHandler);
+        mMirror = new MirrorCamera(this);
+        mSounds = new GenerativeSounds(this);
+        mMusic = new MusicVisualizer(this, mHandler, mMusicBars, () -> mRenderer.invalidate());
         mIdleController = new IdleController(this, mHandler, mIdle, mRenderer::invalidate);
         applySettings();
-        List<String> keys = new ArrayList<>(List.of(GlyphSettings.ALL));
-        for (Toy t : mToys.allToys()) keys.add(GlyphSettings.toyKey(t.id()));
-        for (String key : keys) {
+        for (String key : GlyphSettings.ALL) {
             getContentResolver().registerContentObserver(
                     GlyphSettings.uri(key), false, mSettingsObserver);
         }
@@ -139,6 +150,10 @@ public final class GlyphService extends Service {
         mRecordLed.stop();
         mIdleController.stop();
         mToyBridge.stop();
+        mMusic.stop();
+        mToySensors.stop();
+        mMirror.setWanted(false);
+        mBackground.shutdown();
         mRenderer.stop();
         super.onDestroy();
     }
@@ -157,10 +172,24 @@ public final class GlyphService extends Service {
     void onNotification(String pkg) {
         if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.NOTIFICATIONS)) return;
         Effects.Pattern fallback = Effects.Pattern.parse(GlyphSettings.string(getContentResolver(),
-                GlyphSettings.DEFAULT_PATTERN, "RING"), Effects.Pattern.RING);
+                GlyphSettings.DEFAULT_PATTERN, "GENERATIVE"), Effects.Pattern.GENERATIVE);
         Effects.Pattern pattern = Effects.Pattern.parse(mAppPatterns.get(pkg), fallback);
-        mPulse.trigger(SystemClock.uptimeMillis(), pattern);
+        if (pattern == Effects.Pattern.GENERATIVE) {
+            mPulse.trigger(SystemClock.uptimeMillis(), mSounds.theme(pkg));
+        } else {
+            mPulse.trigger(SystemClock.uptimeMillis(), pattern);
+        }
         mRenderer.invalidate();
+        if (GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS)) {
+            mBackground.execute(() -> mSounds.apply(pkg));
+        }
+    }
+
+    /** Settings preview: an app's generative sound and animation, now. */
+    void previewGenerative(String pkg) {
+        mPulse.trigger(SystemClock.uptimeMillis(), mSounds.theme(pkg));
+        mRenderer.invalidate();
+        mBackground.execute(() -> mSounds.play(pkg));
     }
 
     List<EssentialRule> essentialRules() {
@@ -201,9 +230,9 @@ public final class GlyphService extends Service {
 
     private void applySettings() {
         applyBrightness();
-        List<String> ids = new ArrayList<>();
-        for (Toy t : mToys.allToys()) ids.add(t.id());
-        mToys.setOrder(GlyphSettings.activeToys(getContentResolver(), ids));
+        List<String> order = new ArrayList<>(GlyphSettings.activeToys(getContentResolver()));
+        order.add(GlyphSettings.OFF);
+        mToys.setOrder(order);
         if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS)) mToys.deselect();
         mAppPatterns = AppPatterns.parse(
                 GlyphSettings.string(getContentResolver(), GlyphSettings.APP_PATTERNS, ""));
@@ -211,6 +240,19 @@ public final class GlyphService extends Service {
         mEssentialShown = "\u0000"; // icons may have changed: redraw
         GlyphNotificationListener.refreshEssential();
         if (mRecordLed != null) mRecordLed.update();
+        if (mMusic != null) mMusic.setEnabled(GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.MUSIC));
+        boolean genSounds = GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS);
+        if (mSounds != null && (mGenSoundsOn == null || mGenSoundsOn != genSounds)) {
+            boolean first = mGenSoundsOn == null;
+            mGenSoundsOn = genSounds;
+            if (genSounds) {
+                mBackground.execute(() -> {
+                    for (AppList.App app : AppList.launchable(this)) mSounds.apply(app.pkg);
+                });
+            } else if (!first) {
+                mBackground.execute(mSounds::revertAll);
+            }
+        }
         if (mIdleController != null) mIdleController.update();
         mRenderer.invalidate();
     }
@@ -218,16 +260,15 @@ public final class GlyphService extends Service {
     /** Nothing SDK toys appeared or disappeared (package installed / removed). */
     private void onSdkToysChanged(List<RemoteToy> toys) {
         mToys.setExtraToys(new ArrayList<>(toys), BUILT_IN_TOYS);
-        for (RemoteToy t : toys) {
-            getContentResolver().registerContentObserver(
-                    GlyphSettings.uri(GlyphSettings.toyKey(t.id())), false, mSettingsObserver);
-        }
         applySettings();
     }
 
     /** Always-on shown/hidden (and every minute while shown): drive the always-on SDK toy. */
     private void onAod(boolean shown) {
         String id = GlyphSettings.string(getContentResolver(), GlyphSettings.AOD_TOY, "");
+        Toy builtIn = mToys.byId(id.isEmpty() ? "clock" : id);
+        mIdle.setBuiltInToy(builtIn != null && !(builtIn instanceof RemoteToy)
+                && builtIn.aodSupported() ? builtIn : null);
         RemoteToy toy = shown && !id.isEmpty() ? mToyBridge.byId(id) : null;
         if (toy != null && toy.aodSupported()) {
             mIdle.setRemoteToy(toy);
@@ -289,6 +330,7 @@ public final class GlyphService extends Service {
     void showToy(String id) {
         mToys.show(id, SystemClock.uptimeMillis());
         mRenderer.invalidate();
+        updateToySensors();
     }
 
     /** What the matrix shows right now, for the Settings preview. */
@@ -309,6 +351,11 @@ public final class GlyphService extends Service {
         Calendar now = Calendar.getInstance();
         ctx.hour = now.get(Calendar.HOUR_OF_DAY);
         ctx.minute = now.get(Calendar.MINUTE);
+        ctx.second = now.get(Calendar.SECOND);
+        ctx.epochMs = now.getTimeInMillis();
+        ctx.utcOffsetHours = now.getTimeZone().getOffset(ctx.epochMs) / 3600000.0;
+        if (mToySensors != null) mToySensors.fill(ctx);
+        if (mMirror != null) ctx.camera = mMirror.grid();
         return ctx;
     }
 
@@ -368,14 +415,34 @@ public final class GlyphService extends Service {
                 if (toys) mToys.onTap(now); else showBatteryLevel();
             } else if ("long_press".equals(event) && toys) {
                 mToys.onLongPress(now);
+                if (mToys.selected() instanceof Toys.Mirror m && m.takeCaptureRequest()) {
+                    mMirror.capture();
+                }
             } else if ("down".equals(event) && toys) {
                 mToys.onButtonDown(now);
             } else if ("up".equals(event) && toys) {
                 mToys.onButtonUp(now);
             }
             mRenderer.invalidate();
+            updateToySensors();
         }
     };
+
+    /**
+     * Runs the sensors / camera the toy on screen needs, and checks again every second while
+     * any is running, so they stop when the toy times out.
+     */
+    private void updateToySensors() {
+        mHandler.removeCallbacks(mSensorCheck);
+        int needed = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS)
+                ? mToys.neededSensors(SystemClock.uptimeMillis()) : 0;
+        mToySensors.setWanted(needed);
+        mMirror.setWanted((needed & Toy.SENSOR_CAMERA) != 0);
+        if (needed != 0) mHandler.postDelayed(mSensorCheck, 1000);
+        mToySensors.refreshLocation(SystemClock.uptimeMillis());
+    }
+
+    private final Runnable mSensorCheck = this::updateToySensors;
 
     private final class CallState extends TelephonyCallback
             implements TelephonyCallback.CallStateListener {

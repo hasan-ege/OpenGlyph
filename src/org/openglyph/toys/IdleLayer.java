@@ -16,6 +16,8 @@ public final class IdleLayer implements Effect {
     static final double AOD_LEVEL = 0.22;
 
     private final Toy clock = new Toys.Clock();
+    /** The built-in always-on toy (clock or moon phase). */
+    private volatile Toy builtIn = clock;
     private final Supplier<Toy.Context> context;
     private volatile boolean alwaysOn;
     /** Essential notification icon (625 grid), or null. */
@@ -35,6 +37,11 @@ public final class IdleLayer implements Effect {
 
     public void setEssential(int[] icon) {
         essential = icon == null ? null : icon.clone();
+    }
+
+    /** A built-in toy for always-on (null: the clock). */
+    public void setBuiltInToy(Toy toy) {
+        builtIn = toy == null ? clock : toy;
     }
 
     public void setRemoteToy(RemoteToy toy) {
@@ -68,7 +75,7 @@ public final class IdleLayer implements Effect {
             f.setGrid(remoteFrame);
         } else if (alwaysOn) {
             Frame lit = new Frame();
-            clock.render(lit, now, context.get());
+            builtIn.render(lit, now, context.get());
             for (int y = 0; y < MatrixLayout.HEIGHT; y++)
                 for (int x = 0; x < MatrixLayout.WIDTH; x++)
                     if (lit.get(x, y) > 0) f.set(x, y, (int) (lit.get(x, y) * AOD_LEVEL));

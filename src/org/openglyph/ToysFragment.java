@@ -52,12 +52,10 @@ public final class ToysFragment extends Fragment {
         super.onResume();
         requireActivity().setTitle(R.string.settings_toys_tile);
         List<ToyCatalog.Entry> all = ToyCatalog.all(requireContext());
-        List<String> ids = new ArrayList<>();
-        for (ToyCatalog.Entry e : all) ids.add(e.id);
         mActive.clear();
-        for (String id : GlyphSettings.activeToys(requireContext().getContentResolver(), ids)) {
+        for (String id : GlyphSettings.activeToys(requireContext().getContentResolver())) {
             ToyCatalog.Entry e = ToyCatalog.byId(all, id);
-            if (e != null) mActive.add(e);
+            if (e != null && !GlyphSettings.OFF.equals(e.id)) mActive.add(e);
         }
         mPicked = Math.min(mPicked, Math.max(0, mActive.size() - 1));
         View root = requireView();
