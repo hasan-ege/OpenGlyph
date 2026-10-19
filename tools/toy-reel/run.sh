@@ -11,5 +11,6 @@ javac -nowarn -d "$cls" \
     "$og"/src/org/openglyph/core/*.java \
     "$og"/src/org/openglyph/effects/*.java \
     "$og"/src/org/openglyph/toys/*.java \
+    "$here"/org/openglyph/toys/AwtTextRasterizer.java \
     "$here"/org/openglyph/toys/ToyReel.java
 java -cp "$cls" org.openglyph.toys.ToyReel "$out" "$here/template.html"

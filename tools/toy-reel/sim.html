@@ -68,6 +68,12 @@ input[type=range]{width:100%;accent-color:var(--accent)}
         <button data-timer="120">2 dk</button>
         <button data-timer="0">İptal</button>
       </div>
+      <form class="row" id="callerForm">
+        <small style="color:var(--mute)">Arayan (Caller ID):</small>
+        <input id="caller" value="Ayşe Yılmaz" aria-label="Arayanın adı ya da numarası"
+          style="font:inherit;font-size:13px;flex:1;min-width:140px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:7px 12px">
+        <button class="primary" type="submit">Telefonda göster</button>
+      </form>
     </section>
   </div>
   <div class="grid" id="grid"></div>
@@ -108,6 +114,8 @@ for(const id of ['gx','gy','heading','battery']){
 document.getElementById('level').onclick=()=>{for(const id of ['gx','gy']){const el=document.getElementById(id);el.value=0;el.oninput();}};
 const ch=document.getElementById('charging');
 ch.onclick=()=>{const on=ch.getAttribute('aria-pressed')!=='true';ch.setAttribute('aria-pressed',on);ch.textContent=on?'Şarjdan çıkar':'Şarja tak';ch.classList.toggle('primary',on);post(`/ctx?charging=${on?1:0}`);};
+document.getElementById('callerForm').onsubmit=e=>{e.preventDefault();
+  post('/caller?name='+encodeURIComponent(document.getElementById('caller').value));};
 document.querySelectorAll('[data-timer]').forEach(b=>b.onclick=()=>post(`/ctx?timer=${b.dataset.timer}`));
 // Every toy
 let canvases=[];

@@ -45,6 +45,7 @@ public final class ToySim {
     private final long t0 = System.nanoTime();
     private volatile float tiltX, tiltY, heading;
     private final Map<Object, Long> shakeUntil = new HashMap<>();
+    private final CallerId callerId = new CallerId();
 
     ToySim() {
         ctx.batteryPercent = 76;
@@ -84,7 +85,8 @@ public final class ToySim {
         byte[] out = new byte[(toys.size() + 1) * 625];
         Frame f = new Frame();
         prepare(phone, now);
-        if (phone.isActive(now)) phone.render(f, now);
+        if (callerId.isActive(now)) callerId.render(f, now);          // Caller ID on top, as on the phone
+        else if (phone.isActive(now)) phone.render(f, now);
         else if (Hourglass.effect().isActive(now)) Hourglass.effect().render(f, now); // a timer runs
         copy(f, out, 0);
         for (int i = 0; i < toys.size(); i++) {
@@ -127,6 +129,10 @@ public final class ToySim {
                 default -> {}
             }
         }
+    }
+
+    synchronized void showCaller(String name) {
+        callerId.show(name, now());
     }
 
     synchronized void setContext(Map<String, String> q) {
@@ -182,6 +188,7 @@ public final class ToySim {
     public static void main(String[] args) throws IOException {
         int port = args.length > 0 ? Integer.parseInt(args[0]) : 8766;
         Path page = Path.of(args.length > 1 ? args[1] : "sim.html");
+        org.openglyph.core.GlyphText.setRasterizer(new AwtTextRasterizer());
         ToySim sim = new ToySim();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/", ex -> {
@@ -195,6 +202,10 @@ public final class ToySim {
                     case "/press" -> {
                         Map<String, String> q = query(ex.getRequestURI());
                         sim.press(q.getOrDefault("toy", ""), q.getOrDefault("kind", ""));
+                        send(ex, 204, "text/plain", new byte[0]);
+                    }
+                    case "/caller" -> {
+                        sim.showCaller(query(ex.getRequestURI()).getOrDefault("name", ""));
                         send(ex, 204, "text/plain", new byte[0]);
                     }
                     case "/ctx" -> {

@@ -551,9 +551,16 @@ public final class Toys {
     /** Magic 8 Ball: long press or a shake, then an answer floats up. */
     public static final class Magic8 implements Toy {
         static final String[] ANSWERS = {
-            "YES", "NO", "MAYBE", "LATER", "SURE", "NOPE", "ASK AGAIN", "NOT NOW", "LIKELY",
-            "DOUBT IT", "OF COURSE", "NO WAY", "DEFINITELY", "UNCLEAR", "WHY NOT", "FORGET IT",
+            "Yes", "No", "Maybe", "Later", "Sure", "Nope", "Ask again", "Not now", "Likely",
+            "Doubt it", "Of course", "No way", "Definitely", "Unclear", "Why not", "Forget it",
         };
+        static final String[] ANSWERS_TR = {
+            "Evet", "Hayır", "Belki", "Sonra", "Tabii", "Yok", "Tekrar sor", "Şimdi değil",
+            "Muhtemelen", "Şüpheli", "Elbette", "Asla", "Kesinlikle", "Belirsiz", "Neden olmasın",
+            "Unut gitsin",
+        };
+        /** Answer text height in LEDs (Text to Glyph). */
+        static final int TEXT_H = 13;
         static final long SHAKE_MS = 1200, SHOW_MS = 7000;
         private final Random random;
         private final Shake shake = new Shake();
@@ -570,7 +577,8 @@ public final class Toys {
 
         void ask(long now) {
             start = now;
-            answer = ANSWERS[random.nextInt(ANSWERS.length)];
+            String[] set = "tr".equals(java.util.Locale.getDefault().getLanguage()) ? ANSWERS_TR : ANSWERS;
+            answer = set[random.nextInt(set.length)];
         }
 
         String answer() { return answer; }
@@ -581,10 +589,11 @@ public final class Toys {
             if (t < SHAKE_MS) {
                 ball(f, 2.5 * Math.sin(t / 55.0) * (1 - t / (double) SHAKE_MS), ON);
             } else if (t < SHAKE_MS + SHOW_MS) {
-                // The answer scrolls through the window in the stopwatch's 5x7 letters; a short
-                // one stops in the middle.
+                // The answer, set in a real font (Text to Glyph); a short one slides in and
+                // stops in the middle, a long one scrolls through.
                 long at = t - SHAKE_MS;
-                int w = Font.bigTextWidth(answer);
+                org.openglyph.core.GlyphText.Line line = org.openglyph.core.GlyphText.line(answer, TEXT_H);
+                int w = line != null ? line.width : Font.bigTextWidth(answer);
                 double fade = Math.min(1, at / 300.0);
                 int x;
                 if (w <= 23) {
@@ -594,7 +603,8 @@ public final class Toys {
                 } else {
                     x = (int) (25 - (at / 55) % (w + 26));
                 }
-                Font.bigText5x7(f, answer, x, 9, (int) (ON * fade));
+                if (line != null) org.openglyph.core.GlyphText.draw(f, line, x, (25 - TEXT_H) / 2, (int) (ON * fade));
+                else Font.bigText5x7(f, answer, x, 9, (int) (ON * fade));
             } else {
                 ball(f, 0, ON);
             }

@@ -135,6 +135,8 @@ public final class GlyphService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        // Text to Glyph: names and answers are set with the system font.
+        org.openglyph.core.GlyphText.setRasterizer(new PaintTextRasterizer());
         mRenderer = new Renderer(new SysfsMatrixSink(SysfsMatrixSink.findDir()),
                 SystemClock::uptimeMillis);
         mRenderer.setFaultListener((source, error) ->

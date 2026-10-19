@@ -2,10 +2,11 @@ package org.openglyph.toys;
 
 import org.openglyph.core.Effect;
 import org.openglyph.core.Frame;
+import org.openglyph.core.GlyphText;
 
 /**
- * Caller ID: the caller's name (or number, when not in contacts) scrolling across the matrix
- * in big letters, over the incoming-call animation. Shown on a short Glyph Button press while
+ * Caller ID: the caller's name (or number, when not in contacts) scrolling across the matrix,
+ * set in a real font (Text to Glyph: any name, any script), over the incoming-call animation. Shown on a short Glyph Button press while
  * the phone rings.
  */
 public final class CallerId implements Effect {
@@ -14,8 +15,12 @@ public final class CallerId implements Effect {
     private volatile String text;
     private volatile long startMs;
 
+    private static final int TEXT_H = 13;
+
     public void show(String caller, long nowMs) {
-        String t = Font.plain(caller).replaceAll("[^A-Z0-9+]+", " ").trim();
+        String t = caller == null ? "" : caller.trim();
+        // The bitmap fallback (no font engine) only knows capitals and digits.
+        if (!GlyphText.available()) t = Font.plain(t).replaceAll("[^A-Z0-9+]+", " ").trim();
         text = t.isEmpty() ? null : t;
         startMs = nowMs;
     }
@@ -25,7 +30,8 @@ public final class CallerId implements Effect {
     }
 
     private static int width(String t) {
-        return t.length() * 8 - 2;
+        GlyphText.Line l = GlyphText.line(t, TEXT_H);
+        return l != null ? l.width : t.length() * 8 - 2;
     }
 
     /** One pass: from just off the right edge until the last letter leaves on the left. */
@@ -45,7 +51,9 @@ public final class CallerId implements Effect {
         if (t == null) return -1;
         long inPass = (now - startMs) % passMs(t);
         int x = 25 - (int) (inPass * PX_PER_S / 1000);
-        Font.bigText(f, t, x, 7, Frame.MAX);
+        GlyphText.Line l = GlyphText.line(t, TEXT_H);
+        if (l != null) GlyphText.draw(f, l, x, (25 - TEXT_H) / 2, Frame.MAX);
+        else Font.bigText(f, t, x, 7, Frame.MAX);
         return 33;
     }
 }
