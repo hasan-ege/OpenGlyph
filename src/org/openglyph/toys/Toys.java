@@ -259,13 +259,19 @@ public final class Toys {
                     if (MatrixLayout.exists(x, y)) f.set(x, y, ON);
             double el = Sky.sunElevation(lat, lon, ctx.epochMs);
             double sx = hoursNow / 24.0 * 25, sy = yOf(el);
-            for (int y = 0; y < 25; y++) {
-                for (int x = 0; x < 25; x++) {
-                    if (!MatrixLayout.exists(x, y)) continue;
-                    if (Math.hypot(x + 0.5 - sx, y + 0.5 - sy) <= 2.7) f.set(x, y, y < HORIZON ? ON : 0);
+            // The same disc every frame: a fixed sprite on whole LEDs, never re-rasterised.
+            int x0 = (int) Math.round(sx - SUN[0].length() / 2.0);
+            int y0 = (int) Math.round(sy - SUN.length / 2.0);
+            for (int r = 0; r < SUN.length; r++) {
+                for (int c = 0; c < SUN[r].length(); c++) {
+                    int x = x0 + c, y = y0 + r;
+                    if (SUN[r].charAt(c) != '#' || !MatrixLayout.exists(x, y)) continue;
+                    f.set(x, y, y < HORIZON ? ON : 0);
                 }
             }
         }
+
+        static final String[] SUN = {".####.", "######", "######", "######", "######", ".####."};
 
         static double yOf(double elevation) {
             return HORIZON + 0.5 - elevation / 90.0 * 12;
