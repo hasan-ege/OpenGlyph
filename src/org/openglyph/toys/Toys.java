@@ -277,11 +277,11 @@ public final class Toys {
                     if (!MatrixLayout.exists(x, y)) continue;
                     double d = Math.hypot(x + 0.5 - sx, y + 0.5 - sy);
                     boolean below = y >= HORIZON;
-                    if (d > 3.4) continue;
-                    // The sun: a ring, lit above the horizon and black below it; inside and
-                    // round it the background, so the path does not run into it.
-                    boolean ring = d > 1.6 && d <= 2.7;
-                    f.set(x, y, ring != below ? ON : 0);
+                    if (d > 3.5) continue;
+                    // The sun: a filled disc, lit above the horizon and black below it, with a
+                    // gap of background round it so the path does not run into it.
+                    boolean sun = d <= 2.5;
+                    f.set(x, y, sun != below ? ON : 0);
                 }
             }
         }
