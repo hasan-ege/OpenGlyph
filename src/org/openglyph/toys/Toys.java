@@ -581,28 +581,20 @@ public final class Toys {
             if (t < SHAKE_MS) {
                 ball(f, 2.5 * Math.sin(t / 55.0) * (1 - t / (double) SHAKE_MS), ON);
             } else if (t < SHAKE_MS + SHOW_MS) {
-                // The die surfaces in the window: a triangle, the answer on it.
+                // The answer scrolls through the window in the stopwatch's 5x7 letters; a short
+                // one stops in the middle.
                 long at = t - SHAKE_MS;
-                double rise = Math.min(1, at / 700.0);
-                int value = (int) (ON * rise);
-                int lift = (int) Math.round(3 * (1 - rise));
-                Art.paint(f, (x, y) -> {
-                    double yy = y - lift;
-                    if (yy < 4.5 || yy > 21.5) return 0;
-                    double half = (yy - 4.5) * 0.72;
-                    double inside = half - Math.abs(x - Art.MID);
-                    if (inside < 0) return 0;
-                    return inside < 0.8 || yy > 20.7 ? 0.35 : 0.06;
-                }, 3, value);
-                String[] lines = wrap(answer);
-                int y0 = lines.length == 1 ? 13 : 11;
-                for (int i = 0; i < lines.length; i++) {
-                    String line = lines[i];
-                    int w = Font.textWidth(line);
-                    int y = y0 + i * 6 + lift;
-                    if (w <= 23) Font.text(f, line, (25 - w) / 2, y, value);
-                    else Font.text(f, line, (int) (23 - (at / 70) % (w + 24)), y, value);
+                int w = Font.bigTextWidth(answer);
+                double fade = Math.min(1, at / 300.0);
+                int x;
+                if (w <= 23) {
+                    // Slide in from the right and settle in the middle.
+                    double k = Art.smooth(0, 1, Math.min(1, at / 600.0));
+                    x = (int) Math.round(25 + ((25 - w) / 2.0 - 25) * k);
+                } else {
+                    x = (int) (25 - (at / 55) % (w + 26));
                 }
+                Font.bigText5x7(f, answer, x, 9, (int) (ON * fade));
             } else {
                 ball(f, 0, ON);
             }
@@ -620,12 +612,6 @@ public final class Toys {
                 return Math.max(Math.max(rim * 0.45, shine), Math.max(window, 0.03));
             }, 3, value);
             Font.bigDigit(f, 8, (int) Math.round(cx - 2.5), 9, 0); // the 8, cut out of the window
-        }
-
-        /** The answer in lines that fit (one word per line when it is too wide). */
-        static String[] wrap(String answer) {
-            if (Font.textWidth(answer) <= 23) return new String[] {answer};
-            return answer.split(" ");
         }
 
         boolean active(long now) {

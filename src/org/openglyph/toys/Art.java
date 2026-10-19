@@ -48,37 +48,85 @@ final class Art {
     // ---------------- the moon ----------------
 
     /**
-     * The near side's albedo on the unit disc (x right, y down, as seen from the northern
-     * hemisphere): the dark maria as soft ellipses on bright highlands, plus Tycho and
-     * Copernicus. Rough, but recognisable at 25 x 25 (the "man in the moon").
+     * The near side as seen from Earth (north up, east on the right), 64 x 64, 0..255: NASA's
+     * LRO WAC albedo map (SVS CGI Moon Kit, public domain) projected onto the disc
+     * (tools/toy-reel/moon_near_side.py). Maria, Tycho and the rest are where they really are.
      */
-    private static final double[][] MARIA = { // cx, cy, rx, ry, darkness
-        {-0.30, -0.45, 0.28, 0.21, 0.55}, // Imbrium
-        {0.18, -0.40, 0.17, 0.16, 0.55},  // Serenitatis
-        {0.36, -0.12, 0.22, 0.16, 0.55},  // Tranquillitatis
-        {0.68, -0.30, 0.11, 0.10, 0.60},  // Crisium
-        {0.60, 0.10, 0.13, 0.18, 0.50},   // Fecunditatis
-        {0.38, 0.30, 0.09, 0.09, 0.45},   // Nectaris
-        {-0.62, -0.05, 0.26, 0.45, 0.50}, // Oceanus Procellarum
-        {-0.18, 0.36, 0.18, 0.13, 0.45},  // Nubium
-        {-0.48, 0.36, 0.10, 0.10, 0.50},  // Humorum
-        {0.00, -0.74, 0.46, 0.07, 0.35},  // Frigoris
-        {0.02, -0.17, 0.09, 0.08, 0.45},  // Vaporum
-        {-0.32, -0.02, 0.12, 0.10, 0.35}, // Insularum
-    };
+    static final int MOON_N = 64;
+    private static final byte[] MOON = java.util.Base64.getDecoder().decode(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4+nx8PHx7+vv8Ozq5+bl5gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAOLs6uno7+/v8/n7+fHo5OXg4uPn6vMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AADm6+738Orh4eXj5ePp9e/i3d/c2t/X3+z0////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/i5erh18/H"
+            + "wsPAtbHDysbL0M3R0MXI0drd8P/9/fr/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMvZ3tTMyMK3saidn6CcoJGb"
+            + "qbq2sbi3vb/DxdP0+u3f4dUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAyKy9zLuyopueu7Oxpp6mtrexraijp62kpp2e"
+            + "mZuqxODv6NbUvcIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAypucrZuYtLPEwcG0sLHKyZuqtdS4q6evo6SmpJyal6vFz9jP"
+            + "3drV6wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsZuVk3uAm8TGybKws5mFjZuaqbfB0MWyqavBvq6nqK6qxdLOz8nGz8zZAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAn4mIi5WescTIpZaMoH6Cf4abj4eYtrzDuqu2rLC9t6+lr7/Mz8/auL7R0NMAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAnHd7gn9/qrewqHmEfG5qd4F/hImFjpq2w8K7u8nRwLWjsLSwsLrC1MW4t8HT1gAAAAAAAAAAAAAAAAAAAAAA"
+            + "pnZ0enp2jKOjsIxxb29ra3J6gIKAg4+XqrS/x8TBvriqp6S+tbGztb7Pvs29vdzgAAAAAAAAAAAAAAAAAAAAnYFvcnd3dZyh"
+            + "oYN3a2ZnbHBveIF8fImTpaSqtcDMu7y6sZmWnaeporbAy8LAycnG4NcAAAAAAAAAAAAAAAAAonxtdHpxfISPjI1xdXJqZmpu"
+            + "cHeBfoCKmKCfmLC+vKSQoq2fj5qcm4uiybzAxNDZyMPK2wAAAAAAAAAAAAAAvIJvc3ZvdXh7e4Zvc3p0cWtpcXV2e3hzjo2c"
+            + "q5WcvKx8eniJmJZ9i6GOmK3N0sjG1drBwdLeAAAAAAAAAAAAAHl1dnNucHp3dHhzcn93b3BrbGt3cHV2b3eLmKyWlKmRcnl7"
+            + "eXmEeou4pKi8xdHUyNDfx7/O2AAAAAAAAAAAAKZtb2Ztdnt9fXyCeXx5dHFpb29zcnV6cneJlKKrppKUf21xdG9zhHd4s7m2"
+            + "yc3U29XP1cu8zNLgAAAAAAAAALWMiW9mand2joF4cn2Hd3Z1d3NueHN1enSLlZWZqaSWgXp5c3B0c311Z3CjvM7N1Nvg1tfH"
+            + "zMnT2+QAAAAAAACLf3xraG53nYiFgHmAenNufnZybHV0mYqNnqSbkYSXqo9weHFxd3l6bmphgb3b2MvI2c/Ms8rHzdnrAAAA"
+            + "AADFi4FpaWVyjK2QjHp2bG52bXh1emx6cnp8fpyko5mJoqOKaGVpb3B8d2xzZoeq09fPyLe5w726r8TN4tQAAAAAr450b2Zs"
+            + "eKO1j35vb290k3V6gHR/fHN5eGx8jp6uwq+pd2BiZWxygGxlcGl6pbSzwMSst7m8nIqurtfaAAAAAKh2gGVhaHuCgod8end7"
+            + "h4+EfnOIfnx2fXh6b3Gdtb6sk3tkZmpqeXttaW9rZqGunp/PvL/Em4mKfpjG1QAAAOCVaGtdYGpvd3d+hXdxcoCAgoeAeoOH"
+            + "gH6JeXiPpKyhmod2dXZxZnJ1bGxuY3aWmoqPqM3U0KGEe3Bxsc++AADHj2ldWmNmaW5vfox9cHeIi5ebhomHk5OLj4mmoqmh"
+            + "lIeKg255foSHb21eX3Jmc4x9coy13/S/gXdwaJjCqQAAwXtnaF1XY2Vucn6Jj2+El7KkqaWknqKjn4+GiZuWjXZ0cHWlnHOA"
+            + "tZOKZ3RgYV5ucGp1rLXnxoR1bmqNwZ0Ay7GEaGZYVlxidm5/iIl2fpurq6W6uqykp5uShnlub4B5d2xthZR4kJSCX1NZWmBk"
+            + "WlxiXKCyytuYd3FqqsOffsG1iWllW15jY2tyfpWZe3Obs7+uv9Ctp6SgjIV2XF5+c2ZlV29yg5aaZVZdVGVpY1dWVFRlfqvR"
+            + "vIpxfL64uorTxptmYmBeX2JhdpCtpIWGlaewvOPks6Sjmo93dW+GmZ2GcGBrgKSklHNUU1ReZ1ddW1dkZIGXyMm7m6u3s8Sf"
+            + "2tajbXNtaGhiZYGmvriQgImRp6uvr6CXiZeHa3OKpKGxnZeMkI+usp10WVlkZFhcW1xaXXSTiZK/xLSzqpS8tODNt3VoZmVk"
+            + "Z2x+l6+pj46eoaqjopSTcn+GZk9qjbajqaq2nqeyvLejg2RwamBYX2JfZ2ZyfJeRlry8waqItM3PzcSCXV1jY25lc4iXk4OP"
+            + "i5msqJ6TinJ8hm1ac32Zo7O0x7bI18e0po5xZmJeYmFpaHNsc4GQjXCLtLe2msG40NDMe15ZXmdiYWeFjICGh4COoJuvmJB3"
+            + "fYZ9dHlwh42XtL/DzufZvqiwhWZjbmNrc31vZXCRhHVnY4GXpKmtrcjSwXVhYV9mZGdhcnp8eoOLjoqbmrSbgHl9e4iWkYKB"
+            + "mbHH0NHf08e+ro50am5qa3a8noaAhm1ycGZhhIuarZ/E0rh8ZlxcZWBgWmlpcHp1e4iIh4mQnZCNhIqgsKiaiaa5xcrMzMnI"
+            + "zcC5sJiBcHGczLyuq3tzcmdia36Znq6hwsK9o2BbZW9gXWNuYmp5ioCHf3N9iZyYkp6vs7q/sbCtusfXycPKyMvO2tXJqH13"
+            + "sbaws6J8d3RpbXmCprKxoMvAjqt4W2BxZWZlY2NueHaGfH1xlpego4qTys+8vsS9vL3KycnKxsbO3fDhv5eGmrS6sa6nlnN1"
+            + "b3OFhKKltrDOxXjPhGJbbWZlYWxubXl8opl1dYiVoKCHf6y7ucLHw729ytDj1MzLze711LOTmJKztsvBo4d2c253hJyorbSn"
+            + "1si0yZ5yZV5qZmJocmp5i6yQaXR9iKSveXKIp7q4r7S8wsXY6NDLzMzY38+3qp+hsr3M1sCWhXBsgZjVy7i5utTIxMGxgWx2"
+            + "bW5jcm1ncnmWe21ydnSMoIx0fKK4w6ipt7a3ysfGzc3q3O3j1Nq4rqSmu8LRtZ5/eo+m1sm8wsy7ysrHy6B7nnZ/epV9bWxr"
+            + "gHBubXV0gJ6ifn+orrm+urW2tcq+xsnR6dXc3uXnxcSvi5Wz1baUkYiOm7S5ub/Hy8jKvdLEnZSEkJGemXdyZ3B5i5x+hZCI"
+            + "knKEj4aws7y1wMS8wcjFydXM0+78486zmYaVrMu+s7OkiqWwt7S+4wDOy7q6u6+XkpSho6iCh3Brf5ivd4KBe4J0gJKXtrzB"
+            + "ura+xc3U0MnExtXi6/vQo46Ol77Kv7q1rJCpobK6xgAAzMizz76tpJ6kpq6pfIl6eX2lm358iH99gm96r7bHyL/X0sbI2MXC"
+            + "vtLR0+f/0qaSkoO8u6yynpqbqaCqwtoAANDOztfNuayuvsSOe2Vqhp6ZoomPgIF4bHh8lMbByMO5xcfCtcDFwcrLyNfU4Na+"
+            + "pImGq7Wps42g0revsczRAAAA19rj4sSwtLipeWZmZ4Ksj5qUq4x/dHJ7cZS3zce3vLzEub3Nzc3MycHR1NbdwKm7wae9r7Oc"
+            + "utW1tr3JAAAAAOnR4P/n07++qndvZ2Ntko2Alo+GdYl0cXOXpcLKwsrMvb/IztfZy8DDyt/v1sHHzL+0xsjIucnPu7nCwgAA"
+            + "AADm2NH/9dbOvryQgm9raXqVjoaWiHZtb293g6HJv8Xn0cPR4d7bz8a6yuD14tPQ0Mi51tDZ28fP28u/w7sAAAAAAOPV0uPN"
+            + "zd67nYZyc3eamaCAkJJ9dX13gJCx0Nbk5+XQ2+3czMHF19rb2NXd3c7FxdDc4ung4tzUu9oAAAAAAADy1snP0cjc18Oti4aM"
+            + "p66Jl5+5mZqelrHA2unc6uzs5d/Vz8PLz+XYz9LP18zIy9LM3vP86eTYx8jEAAAAAAAAANbIx8vKzuLhv6qapbWcgqOjwtnG"
+            + "wLXP5vDx7vPp7+je0snHzubc09vdx8bE49fN1OX//vrb3cLIAAAAAAAAAAAA0cjKxbXEzr+qta27n4ihlMLj68/Z4O/7///3"
+            + "6vfm3tnc4ebg0NDS08jKx9LVz9ny/P/s3snBAAAAAAAAAAAAAOLOxb3TycbFoZu1tbS0rMXNyODo6vP//f//8+vj7N7o4NLO"
+            + "zsnPzcfIxczV0dHh7/DhzMjKiwAAAAAAAAAAAAAAzMjI0cq4r7Kns8TCxMLK1dXX7O/7//////j27unf4dTR4dbLyc/Q1tHP"
+            + "zdDK5uDmzM+6rAAAAAAAAAAAAAAAAADKy9TNurm/ycHFzcq+u8fZ5fL49/P5///+/PTp6Nnc4Nrb4OPayNXb1Nrh4dHCx76/"
+            + "oQAAAAAAAAAAAAAAAAAAANDNzsCbwrqyxdbQzNbU2tzv8/j/8vz+9vPz8PPd3vDW2+DJyMzW3+Pk4M3Cwr2wqQAAAAAAAAAA"
+            + "AAAAAAAAAAAA2MnKu7y2sLfGytDPy9fm6ff0/+/3/PP08O7p0cnMy9LPz9nf1d7z5tTFv8i+pwAAAAAAAAAAAAAAAAAAAAAA"
+            + "AADJ08fMvrWtuMDP18rU2N359fr7/v/9+PLr29POzMjLzNfe5eTw38W/x8e3rAAAAAAAAAAAAAAAAAAAAAAAAAAAANPYxMO9"
+            + "tbK+w9DOy9nf7/f///b/9fb76ebl3NnU1c/Z1djc1MzT086jmQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAzs/D0MqurcfOzMva"
+            + "8OPy/Pv19vHw+OPe19Tf3Nva3t/e2cjFzbmepQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADPz87P1sC/ys/P2uTc9v3v6PLm"
+            + "5eri19bc39rZ1OLVztrO1Mq1mgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADb5N7j5+vh0eDo5uz//P7u4uPq6+/o6NnZ"
+            + "1+Da2tXW2Nu/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAN3n7fHr7+bm5e3u////8ezs5uft4+Tj4dri7+3n3NrO"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAO3p8PT57enn8fb///ry8ezv9O7q7uvt9PHq4MYAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADm7e/p7Orl7O3t7uzv8O7w7e/o6OLkAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA6ubp5+nr7O/09PTy8Ovs7gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==");
 
+    /** Albedo 0..1 at (x, y) on the unit disc (x right, y down), bilinear. */
     static double moonAlbedo(double x, double y) {
-        double a = 1;
-        for (double[] m : MARIA) {
-            double dx = (x - m[0]) / m[2], dy = (y - m[1]) / m[3];
-            double d = Math.sqrt(dx * dx + dy * dy);
-            a -= m[4] * (1 - smooth(0.7, 1.15, d)) * (a > 0.4 ? 1 : 0.3);
-        }
-        a = Math.max(0.42, a);
-        // Bright young craters with a halo.
-        double tycho = Math.hypot(x + 0.15, y - 0.68), cop = Math.hypot(x + 0.28, y + 0.12);
-        a += 0.35 * (1 - smooth(0.0, 0.09, tycho)) + 0.25 * (1 - smooth(0.0, 0.07, cop));
-        return a;
+        double u = (x + 1) / 2 * MOON_N - 0.5, v = (y + 1) / 2 * MOON_N - 0.5;
+        int x0 = (int) Math.floor(u), y0 = (int) Math.floor(v);
+        double fx = u - x0, fy = v - y0;
+        double a = texel(x0, y0) * (1 - fx) + texel(x0 + 1, y0) * fx;
+        double b = texel(x0, y0 + 1) * (1 - fx) + texel(x0 + 1, y0 + 1) * fx;
+        return (a * (1 - fy) + b * fy) / 255.0;
+    }
+
+    private static int texel(int x, int y) {
+        x = Math.max(0, Math.min(MOON_N - 1, x));
+        y = Math.max(0, Math.min(MOON_N - 1, y));
+        int v = MOON[y * MOON_N + x] & 0xFF;
+        return v == 0 ? 200 : v; // just outside the disc: the limb's brightness
     }
 
     /**
@@ -96,10 +144,11 @@ final class Art {
             double lit = nx * sx + nz * sz;
             // The moon is nearly as bright at the limb as at the centre (not Lambertian).
             double light = smooth(-0.06, 0.12, lit) * (0.82 + 0.18 * Math.max(0, lit));
-            double alb = moonAlbedo(nx, ny);
+            // Contrast as in a photo of the full moon: maria near-dark, highlands bright.
+            double alb = 0.1 + 0.9 * clamp((moonAlbedo(nx, ny) - 0.36) / 0.6);
             // A curve on top: the LEDs show low levels brighter than they are, which washes the
             // maria out; this keeps them visibly darker than the highlands.
-            return Math.max(Math.pow(light * alb, 1.5), 0.05 * alb); // earthshine
+            return Math.max(Math.pow(light * alb, 1.25), 0.05 * alb); // earthshine
         }, 3, value);
     }
 
