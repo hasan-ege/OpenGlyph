@@ -221,16 +221,18 @@ public final class Toys {
             } else {
                 Font.textCentred(f, "%", 18, ON / 3);
             }
-            // The ring fills with the level; its leading end glows.
+            // The ring fills with the level; its leading end glows. Charging, it turns.
             double frac = pct / 100.0;
-            double fb = breathe;
+            double fb = 1;
+            double spin = ctx.charging ? (now % 2400) / 2400.0 : 0;
             Art.paint(f, (x, y) -> {
                 double d = Math.hypot(x - Art.MID, y - Art.MID);
                 double band = 1 - Art.smooth(0.55, 1.05, Math.abs(d - 11.4));
                 if (band <= 0) return 0;
                 double a = Math.atan2(x - Art.MID, Art.MID - y);
                 if (a < 0) a += 2 * Math.PI;
-                double t = a / (2 * Math.PI);
+                double t = a / (2 * Math.PI) - spin;
+                t -= Math.floor(t);
                 if (t > frac) return band * 0.07;
                 return band * (0.45 + 0.55 * Art.smooth(frac - 0.25, frac, t)) * fb;
             }, 3, ON);
