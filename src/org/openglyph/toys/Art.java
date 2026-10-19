@@ -176,12 +176,12 @@ final class Art {
         figure(f, backToFront, dy, fill, value, false);
     }
 
-    /** As above; {@code turnRight}: the figure turned 90 degrees clockwise (dy along its own axis). */
+    /** As above; {@code turnRight}: the figure turned 90 degrees clockwise (dy still moves it up / down). */
     static void figure(Frame f, Part[] backToFront, double dy, double fill, int value,
             boolean turnRight) {
         paint(f, (x, y) -> {
-            double fx = turnRight ? y : x, fy = turnRight ? 2 * MID - x : y;
-            double yy = fy - dy;
+            double sy = y - dy; // the shift is on screen, before turning
+            double fx = turnRight ? sy : x, yy = turnRight ? 2 * MID - x : sy;
             for (int i = backToFront.length - 1; i >= 0; i--) {
                 double d = backToFront[i].sdf(fx, yy);
                 if (d < 0) return d > -0.9 ? 1 : fill;
