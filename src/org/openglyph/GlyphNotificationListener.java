@@ -82,14 +82,16 @@ public final class GlyphNotificationListener extends NotificationListenerService
         if (sbn.isOngoing() || !sbn.isClearable()) return;
         if ((n.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
         if (seen && (n.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) return;
+        boolean audible = n.sound != null;
         if (rankingMap != null && rankingMap.getRanking(sbn.getKey(), mRanking)) {
             if (mRanking.getImportance() < NotificationManager.IMPORTANCE_DEFAULT) return;
             if (mRanking.isSuspended()) return;
+            audible = mRanking.getChannel() != null && mRanking.getChannel().getSound() != null;
         }
         if (getCurrentInterruptionFilter() > INTERRUPTION_FILTER_ALL) return; // Do Not Disturb
 
         GlyphService service = GlyphService.get();
-        if (service != null) service.onNotification(sbn.getPackageName());
+        if (service != null) service.onNotification(sbn.getPackageName(), audible);
     }
 
     @Override

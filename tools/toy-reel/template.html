@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glyph Toys</title>
+<style>
+:root{--bg:#f4f4f2;--card:#fff;--ink:#141414;--mute:#6b6b6b;--line:#e2e2de;--accent:#d71921;--glass:#0b0b0b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e0e0e;--card:#171717;--ink:#f1f1f1;--mute:#9a9a9a;--line:#2a2a2a;--glass:#050505}}
+:root[data-theme="dark"]{--bg:#0e0e0e;--card:#171717;--ink:#f1f1f1;--mute:#9a9a9a;--line:#2a2a2a;--glass:#050505}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{max-width:1180px;margin:0 auto;padding:28px 16px 8px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+h1{margin:0;font:600 22px/1.2 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.02em}
+h1 span{color:var(--accent)}
+.sub{color:var(--mute);margin:4px 0 0}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:7px 14px;cursor:pointer}
+button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+main{max-width:1180px;margin:0 auto;padding:12px 16px 40px;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.card canvas{width:100%;aspect-ratio:1;display:block;border-radius:50%;background:var(--glass);cursor:pointer}
+.name{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.name b{font:600 14px ui-monospace,Menlo,monospace;letter-spacing:.03em}
+.name small{color:var(--mute);font-size:12px;text-align:right}
+.bar{position:relative;height:4px;border-radius:2px;background:var(--line)}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:2px}
+.bar u{position:absolute;top:-3px;width:2px;height:10px;background:var(--accent);border-radius:1px}
+.big{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;place-items:center;padding:16px;z-index:9}
+.big.on{display:grid}
+.big canvas{width:min(86vw,86vh,640px);aspect-ratio:1;border-radius:50%;background:#050505}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>GLYPH<span>.</span>TOYS</h1><p class="sub">Telefondaki toy kodunun birebir kaydı · kırmızı çizgi = uzun basış · büyütmek için tıkla</p></div>
+  <div class="controls">
+    <button id="dots" aria-pressed="true">LED görünümü</button>
+    <button id="pause" aria-pressed="false">Duraklat</button>
+  </div>
+</header>
+<main id="grid"></main>
+<div class="big" id="big"><canvas id="bigc" width="900" height="900"></canvas></div>
+<script>
+"use strict";
+const REELS=/*REELS*/[];
+// Matrix shape: LEDs per row (as MatrixLayout.ROW_LENGTHS), centred.
+const ROWS=[7,11,15,17,19,21,21,23,23,25,25,25,25,25,25,25,23,23,21,21,19,17,15,11,7];
+const EXISTS=new Uint8Array(625);
+ROWS.forEach((n,y)=>{const s=(25-n)>>1;for(let x=s;x<s+n;x++)EXISTS[y*25+x]=1;});
+let ledLook=true,paused=false,bigReel=null;
+const start=performance.now();
+function draw(cv,frame,off){
+  const g=cv.getContext('2d'),S=cv.width,cell=S*0.9/25,o=(S-cell*25)/2;
+  g.clearRect(0,0,S,S);
+  for(let i=0;i<625;i++){if(!EXISTS[i])continue;
+    const v=frame[off+i]/255,x=o+(i%25+0.5)*cell,y=o+((i/25|0)+0.5)*cell;
+    if(ledLook){
+      g.fillStyle=`rgba(255,255,255,${0.06+0.94*Math.pow(v,0.8)})`;
+      g.beginPath();g.arc(x,y,cell*0.36,0,Math.PI*2);g.fill();
+    }else{
+      const c=Math.round(20+235*v);g.fillStyle=`rgb(${c},${c},${c})`;
+      g.fillRect(x-cell/2,y-cell/2,cell+0.5,cell+0.5);
+    }
+  }
+}
+const cards=REELS.map(r=>{
+  const bytes=Uint8Array.from(atob(r.frames),c=>c.charCodeAt(0));
+  const n=bytes.length/625, len=n*1000/r.fps;
+  const el=document.createElement('section');el.className='card';
+  el.innerHTML=`<canvas width="420" height="420" aria-label="${r.title}"></canvas>
+    <div class="name"><b>${r.title}</b><small>${r.note}</small></div><div class="bar"><i></i></div>`;
+  const bar=el.querySelector('.bar');
+  for(const p of r.presses){const u=document.createElement('u');u.style.left=(p/len*100)+'%';bar.append(u);}
+  document.getElementById('grid').append(el);
+  const c={r,bytes,n,len,cv:el.querySelector('canvas'),fill:bar.querySelector('i'),last:-1};
+  c.cv.onclick=()=>{bigReel=c;document.getElementById('big').classList.add('on');};
+  return c;
+});
+document.getElementById('big').onclick=()=>{bigReel=null;document.getElementById('big').classList.remove('on');};
+let pausedAt=0,offset=0;
+function tick(now){
+  const t=paused?pausedAt:now-start-offset;
+  for(const c of cards){
+    const tt=t%c.len,i=Math.min(c.n-1,Math.floor(tt*c.r.fps/1000));
+    if(i!==c.last||c.dirty){draw(c.cv,c.bytes,i*625);c.last=i;c.dirty=false;}
+    c.fill.style.width=(tt/c.len*100)+'%';
+    if(bigReel===c)draw(document.getElementById('bigc'),c.bytes,i*625);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+document.getElementById('dots').onclick=e=>{ledLook=!ledLook;e.target.setAttribute('aria-pressed',ledLook);cards.forEach(c=>c.dirty=true);};
+document.getElementById('pause').onclick=e=>{
+  const now=performance.now();
+  if(!paused){pausedAt=now-start-offset;}else{offset=now-start-pausedAt;}
+  paused=!paused;e.target.setAttribute('aria-pressed',paused);};
+</script>
+</body>
+</html>

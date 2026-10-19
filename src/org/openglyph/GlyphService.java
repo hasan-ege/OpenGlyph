@@ -7,6 +7,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
 import android.database.ContentObserver;
 import android.os.BatteryManager;
 import android.os.Handler;
@@ -22,6 +25,8 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -119,7 +124,7 @@ public final class GlyphService extends Service {
     /** RingtoneProvider: this caller's ringtone is about to play; loop their animation. */
     void onCallerRingtone(String callerKey) {
         Generative.Theme theme = mSounds.callerTheme(callerKey);
-        mCall.setTheme(theme, GenerativeSounds.ringPeriodMs(theme), SystemClock.uptimeMillis());
+        mCall.setTheme(theme, mSounds.ringPeriodMs(theme), SystemClock.uptimeMillis());
         mRenderer.invalidate();
     }
 
@@ -132,6 +137,8 @@ public final class GlyphService extends Service {
         super.onCreate();
         mRenderer = new Renderer(new SysfsMatrixSink(SysfsMatrixSink.findDir()),
                 SystemClock::uptimeMillis);
+        mRenderer.setFaultListener((source, error) ->
+                Log.w(TAG, "glyph: " + source.getClass().getSimpleName() + " failed, carrying on", error));
         mRenderer.add(mPulse);
         mRenderer.add(mCharging);
         mRenderer.add(mCall);
@@ -188,6 +195,9 @@ public final class GlyphService extends Service {
         getSystemService(NotificationManager.class).setNotificationListenerAccessGranted(
                 new ComponentName(this, GlyphNotificationListener.class), true, true);
 
+        AudioManager am = getSystemService(AudioManager.class);
+        if (am != null) am.registerAudioPlaybackCallback(mPlaybackCallback, mHandler);
+
         mRenderer.start();
         sInstance = this;
         Log.i(TAG, "started");
@@ -197,6 +207,9 @@ public final class GlyphService extends Service {
     public void onDestroy() {
         sInstance = null;
         if (mTelephony != null) mTelephony.unregisterTelephonyCallback(mCallState);
+        AudioManager am = getSystemService(AudioManager.class);
+        if (am != null) am.unregisterAudioPlaybackCallback(mPlaybackCallback);
+        mHandler.removeCallbacks(mPendingTimeout);
         unregisterReceiver(mPowerReceiver);
         unregisterReceiver(mUnlockReceiver);
         mChannelWatcher.unregister();
@@ -221,15 +234,90 @@ public final class GlyphService extends Service {
     }
 
     @Override
+    protected void dump(java.io.FileDescriptor fd, java.io.PrintWriter pw, String[] args) {
+        pw.println("OpenGlyph renderer:");
+        pw.print(mRenderer.describe(SystemClock.uptimeMillis()));
+        pw.println("bedtime=" + mBedtime + " pocket=" + (mAmbient != null && mAmbient.inPocket())
+                + " auto=" + (mAmbient != null && mAmbient.autoOn())
+                + " pendingPulse=" + (mPendingTheme != null));
+    }
+
+    @Override
     public IBinder onBind(Intent intent) {
         return mBinder;
     }
 
-    /** Called by the notification listener for each alert-worthy notification. */
-    void onNotification(String pkg) {
-        if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.NOTIFICATIONS)) return;
-        mPulse.trigger(SystemClock.uptimeMillis(), mSounds.theme(pkg));
+    // ---- the light starts with the sound ----
+    // SystemUI's NotificationPlayer holds a notification sound back (~500 ms, the audio focus
+    // ramp) and the audio HAL takes ~80 ms more to start the stream. So an audible notification's
+    // animation waits for its player to start, as AudioManager reports it; a ringtone's animation
+    // restarts with the ringtone.
+
+    /** From the player starting to sound leaving the speaker (pal_stream_start, measured). */
+    private static final long AUDIO_START_LATENCY_MS = 80;
+    /** No player started by then (sound suppressed, e.g. too frequent): show it anyway. */
+    private static final long SOUND_WAIT_MS = 1500;
+
+    private Generative.Theme mPendingTheme;
+    private final Set<Integer> mPlaying = new HashSet<>();
+    private final Runnable mPendingTimeout = this::startPendingPulse;
+
+    private void startPendingPulse() {
+        mHandler.removeCallbacks(mPendingTimeout);
+        Generative.Theme theme = mPendingTheme;
+        if (theme == null) return;
+        mPendingTheme = null;
+        mPulse.trigger(SystemClock.uptimeMillis(), theme);
         mRenderer.invalidate();
+    }
+
+    private final AudioManager.AudioPlaybackCallback mPlaybackCallback =
+            new AudioManager.AudioPlaybackCallback() {
+        @Override
+        public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs) {
+            Set<Integer> playing = new HashSet<>();
+            boolean notification = false, ringtone = false;
+            for (AudioPlaybackConfiguration c : configs) {
+                if (c.getPlayerState() != AudioPlaybackConfiguration.PLAYER_STATE_STARTED) continue;
+                int piid = c.getPlayerInterfaceId();
+                playing.add(piid);
+                if (mPlaying.contains(piid)) continue; // was already playing
+                int usage = c.getAudioAttributes().getUsage();
+                if (usage == AudioAttributes.USAGE_NOTIFICATION_RINGTONE) ringtone = true;
+                else if (usage == AudioAttributes.USAGE_NOTIFICATION
+                        || usage == AudioAttributes.USAGE_NOTIFICATION_EVENT) notification = true;
+            }
+            mPlaying.clear();
+            mPlaying.addAll(playing);
+            if (notification && mPendingTheme != null) {
+                mHandler.removeCallbacks(mPendingTimeout);
+                mHandler.postDelayed(mPendingTimeout, AUDIO_START_LATENCY_MS);
+            }
+            if (ringtone) {
+                mHandler.postDelayed(() -> {
+                    mCall.restartTheme(SystemClock.uptimeMillis());
+                    mRenderer.invalidate();
+                }, AUDIO_START_LATENCY_MS);
+            }
+        }
+    };
+
+    /**
+     * Called by the notification listener for each alert-worthy notification; {@code audible}:
+     * its channel has a sound and the ringer is on, so the light waits for the sound.
+     */
+    void onNotification(String pkg, boolean audible) {
+        if (!GlyphSettings.flag(getContentResolver(), GlyphSettings.NOTIFICATIONS)) return;
+        Generative.Theme theme = mSounds.theme(pkg);
+        AudioManager am = getSystemService(AudioManager.class);
+        if (audible && am != null && am.getRingerMode() == AudioManager.RINGER_MODE_NORMAL) {
+            if (mPendingTheme != null) startPendingPulse(); // a second one before the first sounded
+            mPendingTheme = theme;
+            mHandler.postDelayed(mPendingTimeout, SOUND_WAIT_MS);
+        } else {
+            mPulse.trigger(SystemClock.uptimeMillis(), theme);
+            mRenderer.invalidate();
+        }
         if (GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS)) {
             mBackground.execute(() -> mSounds.apply(pkg));
         }
@@ -281,6 +369,10 @@ public final class GlyphService extends Service {
     }
 
     private void applySettings() {
+        mRenderer.ensureRunning();
+        int face = GlyphSettings.integer(getContentResolver(), GlyphSettings.CLOCK_FACE, 0);
+        if (mToys.byId("clock") instanceof Toys.Clock clock) clock.setFace(face);
+        mIdle.setClockFace(face);
         if (mAmbient != null) mAmbient.update();
         // A running Clock timer shows as the hourglass on its own while Glyph Progress is on.
         if (GlyphSettings.flag(getContentResolver(), GlyphSettings.PROGRESS)) {
@@ -327,6 +419,7 @@ public final class GlyphService extends Service {
 
     /** Always-on shown/hidden (and every minute while shown): drive the always-on SDK toy. */
     private void onAod(boolean shown) {
+        mRenderer.ensureRunning();
         String id = GlyphSettings.string(getContentResolver(), GlyphSettings.AOD_TOY, "");
         Toy builtIn = mToys.byId(id.isEmpty() ? "clock" : id);
         mIdle.setBuiltInToy(builtIn != null && !(builtIn instanceof RemoteToy)
@@ -501,6 +594,7 @@ public final class GlyphService extends Service {
         public void onReceive(Context context, Intent intent) {
             String event = intent.getStringExtra(EXTRA_BUTTON_EVENT);
             Log.d(TAG, "Glyph Button " + event);
+            mRenderer.ensureRunning(); // a press always gets a live matrix
             boolean toys = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS);
             long now = SystemClock.uptimeMillis();
             if ("tap".equals(event) && mRinging) {
@@ -511,10 +605,15 @@ public final class GlyphService extends Service {
                 if (toys) mToys.onTap(now); else showBatteryLevel();
             } else if ("long_press".equals(event) && toys) {
                 mToys.onLongPress(now);
+                if (mToys.selected() instanceof Toys.Clock clock) {
+                    // Long press on the clock picks the next face; keep it (and use it always-on).
+                    Settings.Secure.putInt(getContentResolver(), GlyphSettings.CLOCK_FACE, clock.face());
+                }
                 if (mToys.selected() instanceof Toys.Mirror m && m.takeCaptureRequest()) {
                     // The toy counts down 3-2-1 on the matrix; the photo is taken at 0.
                     mHandler.removeCallbacks(mMirrorShot);
-                    mHandler.postDelayed(mMirrorShot, Toys.Mirror.COUNTDOWN_MS);
+                    // A frame after 0, so the matrix picture saved with it is the camera, not the "1".
+                    mHandler.postDelayed(mMirrorShot, Toys.Mirror.COUNTDOWN_MS + 80);
                 }
             } else if ("down".equals(event) && toys) {
                 mToys.onButtonDown(now);
@@ -541,7 +640,12 @@ public final class GlyphService extends Service {
     }
 
     private final Runnable mSensorCheck = this::updateToySensors;
-    private final Runnable mMirrorShot = () -> mMirror.capture();
+    private final Runnable mMirrorShot = () -> {
+        // The matrix at the shutter: the countdown is over, so it shows the camera picture.
+        int[] glyph = new int[org.openglyph.core.MatrixLayout.GRID_SIZE];
+        mRenderer.snapshot(glyph);
+        mMirror.capture(glyph);
+    };
 
     private final class CallState extends TelephonyCallback
             implements TelephonyCallback.CallStateListener {

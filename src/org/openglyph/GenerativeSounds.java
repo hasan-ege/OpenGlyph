@@ -96,16 +96,47 @@ final class GenerativeSounds {
         Generative.Engine engine = engine();
         String seed = deviceSeed(mContext.getContentResolver());
         return mThemes.computeIfAbsent(seed + ":" + engine + ":call:" + callerKey,
-                k -> Generative.theme(seed, "call:" + callerKey, engine));
+                k -> Generative.ringTheme(seed, "call:" + callerKey, engine));
     }
 
-    /** One ring of a caller's ringtone: the melody, then a pause; the ringer loops it. */
-    static long ringPeriodMs(Generative.Theme theme) {
-        return Math.max(theme.durationMs() + RING_PAUSE_MS, MIN_RING_PERIOD_MS);
+    /**
+     * One ring of a caller's ringtone, which the ringer loops: the melody cut where it dies
+     * away, so the next ring follows with no silence (as trimTail in the browser generator).
+     */
+    static short[] ringLoop(Generative.Theme theme) {
+        short[] pcm = theme.synth();
+        int peak = 1;
+        for (short v : pcm) peak = Math.max(peak, Math.abs(v));
+        int end = pcm.length;
+        while (end > 0 && Math.abs(pcm[end - 1]) < peak * 0.02) end--;
+        end = Math.min(pcm.length, end + SAMPLE_RATE * 40 / 1000);
+        short[] out = java.util.Arrays.copyOf(pcm, end);
+        int fade = Math.min(end, SAMPLE_RATE * 30 / 1000);
+        for (int i = 0; i < fade; i++) out[end - 1 - i] = (short) (out[end - 1 - i] * i / fade);
+        return out;
     }
 
-    private static final long RING_PAUSE_MS = 700;
-    private static final long MIN_RING_PERIOD_MS = 2200;
+    /** Deletes caller ringtones made by another version or settings (other key prefix). */
+    private void dropStaleRingtones(String prefix) {
+        SharedPreferences.Editor e = mPrefs.edit();
+        for (Map.Entry<String, ?> entry : mPrefs.getAll().entrySet()) {
+            if (!entry.getKey().startsWith("ring") || entry.getKey().startsWith(prefix)) continue;
+            try {
+                mContext.getContentResolver().delete(Uri.parse((String) entry.getValue()), null, null);
+            } catch (Exception ignored) {
+            }
+            e.remove(entry.getKey());
+        }
+        e.apply();
+    }
+
+    private final java.util.Map<Generative.Theme, Long> mRingPeriods = new java.util.WeakHashMap<>();
+
+    /** The length of one ring, for looping the caller's animation in step with the sound. */
+    synchronized long ringPeriodMs(Generative.Theme theme) {
+        return mRingPeriods.computeIfAbsent(theme,
+                t -> ringLoop(t).length * 1000L / SAMPLE_RATE);
+    }
 
     private static final String RING_FOLDER = Environment.DIRECTORY_RINGTONES + "/OpenGlyph/";
 
@@ -116,9 +147,10 @@ final class GenerativeSounds {
      */
     synchronized Uri ringtoneUri(String callerKey) {
         if (!unlocked()) return null;
-        String key = "ring:" + stamp() + ":" + callerKey;
+        String key = "ring2:" + stamp() + ":" + callerKey;
         String saved = mPrefs.getString(key, null);
         if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
+        dropStaleRingtones("ring2:" + stamp() + ":");
         ContentValues v = new ContentValues();
         v.put(MediaStore.Audio.Media.DISPLAY_NAME, "OpenGlyph caller " + callerKey.substring(0, 12) + ".wav");
         v.put(MediaStore.Audio.Media.TITLE, "OpenGlyph caller");
@@ -131,10 +163,9 @@ final class GenerativeSounds {
         if (uri == null) return null;
         try (OutputStream out = cr.openOutputStream(uri)) {
             Generative.Theme theme = callerTheme(callerKey);
-            short[] melody = theme.synth();
-            int total = (int) (ringPeriodMs(theme) * SAMPLE_RATE / 1000);
-            out.write(Generative.wav(java.util.Arrays.copyOf(melody, Math.max(total, melody.length)),
-                    SAMPLE_RATE));
+            short[] ring = ringLoop(theme);
+            mRingPeriods.put(theme, ring.length * 1000L / SAMPLE_RATE);
+            out.write(Generative.wav(ring, SAMPLE_RATE));
         } catch (Exception e) {
             Log.w(TAG, "writing ringtone failed", e);
             cr.delete(uri, null, null);

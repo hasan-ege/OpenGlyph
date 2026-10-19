@@ -300,6 +300,29 @@ public final class Generative {
         return new Theme(deviceSeed, name, engine, new DiodeConfig(), new ChemicalConfig());
     }
 
+    /**
+     * A caller's ringtone: the same engines, tuned apart (browser generator, 2026-10-19): longer
+     * and softer diode tones with more notes; slower, grainier chemical swells with no reverb.
+     */
+    public static Theme ringTheme(String deviceSeed, String name, Engine engine) {
+        DiodeConfig d = new DiodeConfig();
+        d.notesMax = 7;
+        d.toneLen = 50;
+        d.shape = 0.1;
+        ChemicalConfig c = new ChemicalConfig();
+        c.hitsMin = 3;
+        c.hitsMax = 6;
+        c.spacingMin = 120;
+        c.spacingMax = 320;
+        c.grain = 0.85;
+        c.bubbles = 0.55;
+        c.thump = 0.1;
+        c.swellAttack = 60;
+        c.swellRelease = 470;
+        c.reverb = 0;
+        return new Theme(deviceSeed, name, engine, d, c);
+    }
+
     /** One app's sound and light. */
     public static final class Theme {
         public final Engine engine;

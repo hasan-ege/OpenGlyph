@@ -171,9 +171,13 @@ final class MirrorCamera {
         }
     };
 
-    /** Takes a full-size photo (saved to DCIM/Camera). */
-    synchronized void capture() {
+    /** What the matrix showed when the shutter went (625 grid, 0..Frame.MAX), saved with it. */
+    private volatile int[] mGlyphShot;
+
+    /** Takes a full-size photo (saved to DCIM/Camera), with the matrix picture {@code glyph}. */
+    synchronized void capture(int[] glyph) {
         if (mSession == null || mDevice == null) return;
+        mGlyphShot = glyph;
         try {
             CaptureRequest.Builder b = mDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             b.addTarget(mStill.getSurface());
@@ -192,26 +196,64 @@ final class MirrorCamera {
             buf.get(jpeg);
             String name = "IMG_GLYPH_" + System.currentTimeMillis();
             // The photo as the camera took it, and the selfie as seen in the Glyph mirror.
-            save(name + ".jpg", jpeg);
+            save(name + ".jpg", jpeg, "image/jpeg");
             byte[] mirrored = mirrored(jpeg);
-            if (mirrored != null) save(name + "_MIRROR.jpg", mirrored);
+            if (mirrored != null) save(name + "_MIRROR.jpg", mirrored, "image/jpeg");
+            // And the shot as the Glyph Matrix showed it, LED by LED.
+            int[] glyph = mGlyphShot;
+            mGlyphShot = null;
+            byte[] png = glyph == null ? null : glyphPicture(glyph);
+            if (png != null) save(name + "_GLYPH.png", png, "image/png");
         } catch (Exception e) {
             Log.w(TAG, "saving photo failed", e);
         }
     }
 
-    private void save(String name, byte[] jpeg) throws java.io.IOException {
+    private void save(String name, byte[] data, String mime) throws java.io.IOException {
         ContentValues v = new ContentValues();
         v.put(MediaStore.Images.Media.DISPLAY_NAME, name);
-        v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        v.put(MediaStore.Images.Media.MIME_TYPE, mime);
         v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera");
         Uri uri = mContext.getContentResolver().insert(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
         if (uri == null) return;
         try (OutputStream out = mContext.getContentResolver().openOutputStream(uri)) {
-            out.write(jpeg);
+            out.write(data);
         }
         Log.i(TAG, "photo saved: " + uri);
+    }
+
+    /**
+     * The matrix as a picture: round LEDs on black, each as bright as it was, unlit ones
+     * faintly visible, like looking at the back of the phone.
+     */
+    static byte[] glyphPicture(int[] grid) {
+        final int size = 1200, n = org.openglyph.core.MatrixLayout.WIDTH;
+        final float cell = size * 0.92f / n, origin = (size - cell * n) / 2;
+        android.graphics.Bitmap bmp = null;
+        try {
+            bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas c = new android.graphics.Canvas(bmp);
+            c.drawColor(0xFF000000);
+            android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            for (int y = 0; y < n; y++) {
+                for (int x = 0; x < n; x++) {
+                    if (!org.openglyph.core.MatrixLayout.exists(x, y)) continue;
+                    double v = grid[y * n + x] / (double) org.openglyph.core.Frame.MAX;
+                    int level = (int) Math.round(22 + 233 * Math.pow(Math.max(0, Math.min(1, v)), 0.8));
+                    p.setColor(0xFF000000 | level << 16 | level << 8 | level);
+                    c.drawCircle(origin + (x + 0.5f) * cell, origin + (y + 0.5f) * cell, cell * 0.38f, p);
+                }
+            }
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes);
+            return bytes.toByteArray();
+        } catch (Exception | OutOfMemoryError e) {
+            Log.w(TAG, "glyph picture failed", e);
+            return null;
+        } finally {
+            if (bmp != null) bmp.recycle();
+        }
     }
 
     /** The photo upright (EXIF orientation applied) and flipped left-right, as a JPEG. */

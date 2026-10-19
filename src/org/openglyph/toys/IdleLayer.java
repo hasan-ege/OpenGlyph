@@ -39,6 +39,11 @@ public final class IdleLayer implements Effect {
         essential = icon == null ? null : icon.clone();
     }
 
+    /** The always-on clock's face, as chosen on the clock toy. */
+    public void setClockFace(int face) {
+        ((Toys.Clock) clock).setFace(face);
+    }
+
     /** A built-in toy for always-on (null: the clock). */
     public void setBuiltInToy(Toy toy) {
         builtIn = toy == null ? clock : toy;

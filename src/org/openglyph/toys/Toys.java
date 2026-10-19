@@ -88,14 +88,108 @@ public final class Toys {
 
     // ---- the toys ----
 
-    /** Digital Clock: HH over MM in 7-segment digits. Can be the always-on toy. */
+    /**
+     * Clock, with faces to choose from: long press goes to the next one (the host keeps the
+     * choice). Can be the always-on toy.
+     *   0 seven-segment HH over MM
+     *   1 stacked HH / MM / SS in square digits
+     *   2 analogue: hands, hour ticks, a second dot running round the rim
+     *   3 12-hour "9:41" in bold digits, AM / PM under it, blinking colon
+     *   4 the hour in the middle, the minutes as dots filling the rim
+     */
     public static final class Clock implements Toy {
+        public static final int FACES = 5;
+        private volatile int face;
+
         @Override public String id() { return "clock"; }
 
+        public int face() { return face; }
+
+        public void setFace(int face) { this.face = Math.floorMod(face, FACES); }
+
+        @Override public void onLongPress(long now) { setFace(face + 1); }
+
         @Override public void render(Frame f, long now, Toy.Context ctx) {
-            Font.segPairCentred(f, ctx.hour, 2, ON);
-            Font.segPairCentred(f, ctx.minute, 14, ON);
+            switch (face) {
+                case 1 -> stacked(f, ctx);
+                case 2 -> analogue(f, ctx);
+                case 3 -> twelveHour(f, ctx);
+                case 4 -> minuteDots(f, ctx);
+                default -> {
+                    Font.segPairCentred(f, ctx.hour, 2, ON);
+                    Font.segPairCentred(f, ctx.minute, 14, ON);
+                }
+            }
         }
+
+        private static void pair(Frame f, int n, int y, int value) {
+            Font.squareDigit(f, n / 10, 7, y, value);
+            Font.squareDigit(f, n % 10, 13, y, value);
+        }
+
+        static void stacked(Frame f, Toy.Context ctx) {
+            pair(f, ctx.hour, 1, ON);
+            pair(f, ctx.minute, 9, ON);
+            pair(f, ctx.second, 17, ON * 2 / 5);
+        }
+
+        static void analogue(Frame f, Toy.Context ctx) {
+            double sec = ctx.second + Math.floorMod(ctx.epochMs, 1000) / 1000.0;
+            double min = ctx.minute + sec / 60, hr = ctx.hour % 12 + min / 60;
+            for (int i = 0; i < 12; i++) {
+                double a = i * Math.PI / 6;
+                double r0 = i % 3 == 0 ? 9.6 : 10.4;
+                double sx = Math.sin(a), sy = -Math.cos(a);
+                hand(f, a, r0, 11.6, i % 3 == 0 ? 0.55 : 0.45, i % 3 == 0 ? ON * 3 / 5 : ON / 4);
+            }
+            hand(f, hr / 12 * 2 * Math.PI, -1.2, 6.2, 0.95, ON);
+            hand(f, min / 60 * 2 * Math.PI, -1.6, 9.4, 0.62, ON);
+            double sa = sec / 60 * 2 * Math.PI;
+            double sx = Art.MID + Math.sin(sa) * 11.1, sy = Art.MID - Math.cos(sa) * 11.1;
+            Art.paint(f, (x, y) -> 1.25 - Math.hypot(x - sx, y - sy) / 0.9, 3, ON);
+            Art.paint(f, (x, y) -> 1.3 - Math.hypot(x - Art.MID, y - Art.MID) / 1.1, 3, ON);
+        }
+
+        /** A hand (or tick) from radius r0 to r1 at angle a, half width hw, anti-aliased. */
+        static void hand(Frame f, double a, double r0, double r1, double hw, int value) {
+            double dx = Math.sin(a), dy = -Math.cos(a);
+            Art.paint(f, (x, y) -> {
+                double px = x - Art.MID, py = y - Art.MID;
+                double along = px * dx + py * dy, across = Math.abs(px * dy - py * dx);
+                if (along < r0 || along > r1) return 0;
+                return 1 - Art.smooth(hw - 0.35, hw + 0.35, across);
+            }, 4, value);
+        }
+
+        static void twelveHour(Frame f, Toy.Context ctx) {
+            int h = ctx.hour % 12 == 0 ? 12 : ctx.hour % 12;
+            String hh = Integer.toString(h);
+            int colonOn = ctx.second % 2 == 0 ? ON : ON / 5;
+            int w = hh.length() * 6 + 2 + 12 - 1; // digits, colon, minutes
+            int x = (25 - w) / 2, y = 8;
+            for (char c : hh.toCharArray()) {
+                Font.boldDigit(f, c - '0', x, y, ON);
+                x += 6;
+            }
+            f.set(x, y + 2, colonOn);
+            f.set(x, y + 4, colonOn);
+            x += 2;
+            Font.boldDigit(f, ctx.minute / 10, x, y, ON);
+            Font.boldDigit(f, ctx.minute % 10, x + 6, y, ON);
+            Font.textCentred(f, ctx.hour < 12 ? "AM" : "PM", 17, ON * 2 / 5);
+        }
+
+        static void minuteDots(Frame f, Toy.Context ctx) {
+            Font.bigNumberCentred(f, String.format("%02d", ctx.hour), 9, ON);
+            for (int m = 0; m < 60; m++) {
+                double a = m * Math.PI / 30;
+                int x = (int) Math.round(C + Math.sin(a) * 11), y = (int) Math.round(C - Math.cos(a) * 11);
+                int v = m < ctx.minute ? ON * 3 / 5 : m == ctx.minute ? ON : m % 5 == 0 ? ON / 6 : 0;
+                if (v > 0) f.max(x, y, v);
+            }
+        }
+
+        @Override public long frameIntervalMs() { return face == 2 ? 100 : 1000; }
 
         @Override public boolean aodSupported() { return true; }
     }
@@ -104,17 +198,42 @@ public final class Toys {
     public static final class Battery implements Toy {
         @Override public String id() { return "battery"; }
 
+        static final String[] BOLT = {"..##", ".##.", "####", ".##.", "##.."};
+
         @Override public void render(Frame f, long now, Toy.Context ctx) {
             int pct = Math.max(0, Math.min(100, ctx.batteryPercent));
             String digits = Integer.toString(pct);
-            if (digits.length() == 3) Font.smallNumberCentred(f, digits, 10, ON);
-            else Font.bigNumberCentred(f, digits, 9, ON);
-            int ringValue = ON;
-            if (ctx.charging) {
-                double phase = (now % 2000) / 2000.0;
-                ringValue = (int) (ON * (0.45 + 0.55 * Math.abs(Math.sin(Math.PI * phase))));
+            if (digits.length() == 3) {
+                Font.smallNumberCentred(f, digits, 10, ON);
+            } else {
+                int w = digits.length() * 6 - 1, x = (25 - w) / 2;
+                for (char c : digits.toCharArray()) {
+                    Font.boldDigit(f, c - '0', x, 9, ON);
+                    x += 6;
+                }
             }
-            ring(f, pct / 100.0, ringValue);
+            double breathe = 1;
+            if (ctx.charging) {
+                breathe = 0.5 + 0.5 * Math.abs(Math.sin(Math.PI * (now % 2000) / 2000.0));
+                for (int r = 0; r < BOLT.length; r++)
+                    for (int c = 0; c < 4; c++)
+                        if (BOLT[r].charAt(c) == '#') f.max(11 + c, 2 + r, (int) (ON * breathe));
+            } else {
+                Font.textCentred(f, "%", 18, ON / 3);
+            }
+            // The ring fills with the level; its leading end glows.
+            double frac = pct / 100.0;
+            double fb = breathe;
+            Art.paint(f, (x, y) -> {
+                double d = Math.hypot(x - Art.MID, y - Art.MID);
+                double band = 1 - Art.smooth(0.55, 1.05, Math.abs(d - 11.4));
+                if (band <= 0) return 0;
+                double a = Math.atan2(x - Art.MID, Art.MID - y);
+                if (a < 0) a += 2 * Math.PI;
+                double t = a / (2 * Math.PI);
+                if (t > frac) return band * 0.07;
+                return band * (0.45 + 0.55 * Art.smooth(frac - 0.25, frac, t)) * fb;
+            }, 3, ON);
         }
 
         @Override public long frameIntervalMs() { return 66; }
@@ -133,15 +252,30 @@ public final class Toys {
             double lat = Double.isNaN(ctx.latitude) ? 41.0 : ctx.latitude;
             double lon = Double.isNaN(ctx.longitude) ? ctx.utcOffsetHours * 15 : ctx.longitude;
             double hoursNow = Sky.solarHours(lon, ctx.epochMs);
-            for (int x = 0; x < MatrixLayout.WIDTH; x++) {
-                if (MatrixLayout.exists(x, HORIZON)) f.max(x, HORIZON, DIM);
-                double h = x / 24.0 * 24;
+            // The day's path, sampled finely: a soft line, bright above the horizon.
+            double[] path = new double[101];
+            for (int i = 0; i <= 100; i++) {
+                double h = i / 100.0 * 24;
                 long at = ctx.epochMs + (long) ((h - hoursNow) * 3600000);
-                int y = toY(Sky.sunElevation(lat, lon, at));
-                if (MatrixLayout.exists(x, y)) f.max(x, y, y <= HORIZON ? ON / 3 : ON / 10);
+                path[i] = yOf(Sky.sunElevation(lat, lon, at));
             }
+            Art.paint(f, (x, y) -> {
+                double py = path[(int) Math.round(Math.max(0, Math.min(25, x)) / 25 * 100)];
+                double near = 1 - Art.smooth(0.25, 0.85, Math.abs(y - py));
+                double horizon = 1 - Art.smooth(0.2, 0.6, Math.abs(y - (HORIZON + 0.5)));
+                return Math.max(near * (py <= HORIZON + 0.5 ? 0.55 : 0.14), horizon * 0.22);
+            }, 3, ON);
             double el = Sky.sunElevation(lat, lon, ctx.epochMs);
-            disc(f, hoursNow / 24.0 * 24, toY(el), 1.6, el > 0 ? ON : ON / 2);
+            double sx = hoursNow / 24.0 * 25, sy = yOf(el);
+            double glow = el > 0 ? 1 : 0.45;
+            Art.paint(f, (x, y) -> {
+                double d = Math.hypot(x - sx, y - sy);
+                return glow * Math.max(1.4 - d / 1.6, 0.35 * (1 - Art.smooth(1.5, 3.6, d)));
+            }, 3, ON);
+        }
+
+        static double yOf(double elevation) {
+            return HORIZON + 0.5 - elevation / 90.0 * 12;
         }
 
         static int toY(double elevation) {
@@ -221,21 +355,38 @@ public final class Toys {
 
         double angleAt(long now) {
             if (spinStart == Long.MIN_VALUE) return angle;
-            double t = Math.min(1, (now - spinStart) / (double) SPIN_MS);
-            angle = from + turn * (1 - Math.pow(1 - t, 3));
+            angle = angleOf(now);
             return angle;
         }
 
+        private double angleOf(long now) {
+            double t = Math.min(1, Math.max(0, (now - spinStart) / (double) SPIN_MS));
+            return from + turn * (1 - Math.pow(1 - t, 3));
+        }
+
+        static final long POINT_MS = 1600;
+
         @Override public void render(Frame f, long now, Toy.Context ctx) {
             double a = angleAt(now);
-            double dx = Math.sin(a), dy = -Math.cos(a);
-            line(f, C, C, C + dx * 10.5, C + dy * 10.5, 1, ON);       // neck
-            line(f, C, C, C - dx * 7, C - dy * 7, 4.2, ON * 3 / 5);   // body
-            f.set((int) Math.round(C + dx * 10.5), (int) Math.round(C + dy * 10.5), ON);
+            if (spinning(now)) {
+                // Motion blur: where it was a moment ago, fainter, while it turns fast.
+                for (int k = 3; k >= 1; k--) Art.bottle(f, angleOf(now - k * 22), ON / (1 + 2 * k));
+            }
+            Art.bottle(f, a, ON);
+            long since = spinStart == Long.MIN_VALUE ? -1 : now - spinStart - SPIN_MS;
+            if (since >= 0 && since < POINT_MS) {
+                // It stopped: a light pulses on the rim where the neck points.
+                double dx = Math.sin(a), dy = -Math.cos(a);
+                double pulse = 0.5 + 0.5 * Math.cos(since / 160.0 * Math.PI);
+                Art.paint(f, (x, y) -> 1.2 - Math.hypot(x - (Art.MID + dx * 11.3), y - (Art.MID + dy * 11.3)) / 1.3,
+                        3, (int) (ON * pulse));
+            }
         }
 
         @Override public boolean keepsScreenOn(long now) { return spinning(now); }
-        @Override public long frameIntervalMs() { return spinStart == Long.MIN_VALUE ? -1 : 33; }
+        @Override public long frameIntervalMs() {
+            return spinStart == Long.MIN_VALUE ? -1 : 33;
+        }
     }
 
     /**
@@ -416,20 +567,53 @@ public final class Toys {
             if (shake.feed(ctx, now) && !active(now)) ask(now);
             long t = start == Long.MIN_VALUE ? Long.MAX_VALUE : now - start;
             if (t < SHAKE_MS) {
-                int dx = (int) Math.round(3 * Math.sin(t / 60.0));
-                circle(f, C + dx, C, 9, ON / 2);
-                Font.bigDigit(f, 8, 10 + dx, 9, ON);
+                ball(f, 2.5 * Math.sin(t / 55.0) * (1 - t / (double) SHAKE_MS), ON);
             } else if (t < SHAKE_MS + SHOW_MS) {
-                // Triangle with the answer, scrolling when it is too wide.
-                for (int y = 4; y <= 8; y++) line(f, 12 - (8 - y) * 1.5, y, 12 + (8 - y) * 1.5, y, 1, ON / 6);
-                int w = Font.textWidth(answer);
-                int x = w <= 21 ? (25 - w) / 2
-                        : (int) (23 - ((t - SHAKE_MS) / 70) % (w + 24));
-                Font.text(f, answer, x, 11, ON);
+                // The die surfaces in the window: a triangle, the answer on it.
+                long at = t - SHAKE_MS;
+                double rise = Math.min(1, at / 700.0);
+                int value = (int) (ON * rise);
+                int lift = (int) Math.round(3 * (1 - rise));
+                Art.paint(f, (x, y) -> {
+                    double yy = y - lift;
+                    if (yy < 4.5 || yy > 21.5) return 0;
+                    double half = (yy - 4.5) * 0.72;
+                    double inside = half - Math.abs(x - Art.MID);
+                    if (inside < 0) return 0;
+                    return inside < 0.8 || yy > 20.7 ? 0.35 : 0.06;
+                }, 3, value);
+                String[] lines = wrap(answer);
+                int y0 = lines.length == 1 ? 13 : 11;
+                for (int i = 0; i < lines.length; i++) {
+                    String line = lines[i];
+                    int w = Font.textWidth(line);
+                    int y = y0 + i * 6 + lift;
+                    if (w <= 23) Font.text(f, line, (25 - w) / 2, y, value);
+                    else Font.text(f, line, (int) (23 - (at / 70) % (w + 24)), y, value);
+                }
             } else {
-                circle(f, C, C, 9, ON / 2);
-                Font.bigDigit(f, 8, 10, 9, ON);
+                ball(f, 0, ON);
             }
+        }
+
+        /** The black ball: its rim, a highlight, and the white "8" window. */
+        static void ball(Frame f, double dx, int value) {
+            double cx = Art.MID + dx;
+            Art.paint(f, (x, y) -> {
+                double d = Math.hypot(x - cx, y - Art.MID);
+                if (d > 11.4) return 0;
+                double rim = 1 - Art.smooth(0.3, 0.9, Math.abs(d - 10.9));
+                double shine = Math.max(0, 1 - Math.hypot(x - cx + 5, y - Art.MID + 6) / 2.6) * 0.5;
+                double window = d < 5.6 ? (d < 4.9 ? 0.9 : 0.9 * (5.6 - d) / 0.7) : 0;
+                return Math.max(Math.max(rim * 0.45, shine), Math.max(window, 0.03));
+            }, 3, value);
+            Font.bigDigit(f, 8, (int) Math.round(cx - 2.5), 9, 0); // the 8, cut out of the window
+        }
+
+        /** The answer in lines that fit (one word per line when it is too wide). */
+        static String[] wrap(String answer) {
+            if (Font.textWidth(answer) <= 23) return new String[] {answer};
+            return answer.split(" ");
         }
 
         boolean active(long now) {
@@ -504,18 +688,36 @@ public final class Toys {
     public static final class Compass implements Toy {
         @Override public String id() { return "compass"; }
 
+        static final String[] CARDINALS = {"N", "E", "S", "W"};
+
         @Override public void render(Frame f, long now, Toy.Context ctx) {
-            circle(f, C, C, 11, DIM / 3);
-            if (!ctx.hasHeading) {
-                Font.textCentred(f, "N", 10, DIM);
-                return;
+            double north = ctx.hasHeading ? Math.toRadians(-ctx.heading) : 0;
+            // A bezel of ticks turning with north, the cardinal letters upright on it.
+            Art.paint(f, (x, y) -> {
+                double px = x - Art.MID, py = y - Art.MID, d = Math.hypot(px, py);
+                if (d < 10.3 || d > 12.2) return 0;
+                double a = Math.atan2(px, -py) - north;
+                double k = Math.abs(Math.IEEEremainder(a, Math.PI / 6)) * d;
+                return k < 0.45 ? 0.3 : 0.05;
+            }, 3, ON);
+            for (int i = 0; i < 4; i++) {
+                double a = north + i * Math.PI / 2;
+                int x = (int) Math.round(Art.MID + Math.sin(a) * 7.6 - 1.5);
+                int y = (int) Math.round(Art.MID - Math.cos(a) * 7.6 - 2.5);
+                Font.text(f, CARDINALS[i], x, y, i == 0 ? ON : ON / 4);
             }
-            double a = Math.toRadians(-ctx.heading);
-            double dx = Math.sin(a), dy = -Math.cos(a);
-            line(f, C, C, C + dx * 9, C + dy * 9, 2, ON);
-            line(f, C, C, C - dx * 6, C - dy * 6, 1, ON / 4);
-            disc(f, C + dx * 11, C + dy * 11, 1, ON);
-            disc(f, C, C, 1, ON / 2);
+            if (!ctx.hasHeading) return;
+            // The needle: a slim diamond, the north half bright.
+            double dx = Math.sin(north), dy = -Math.cos(north);
+            Art.paint(f, (x, y) -> {
+                double px = x - Art.MID, py = y - Art.MID;
+                double along = px * dx + py * dy, across = Math.abs(px * dy - py * dx);
+                double len = along >= 0 ? 5.2 : 4.0;
+                double half = 1.25 * (1 - Math.abs(along) / len);
+                if (half <= 0) return 0;
+                double cover = 1 - Art.smooth(half - 0.3, half + 0.3, across);
+                return cover * (along >= 0 ? 1 : 0.22);
+            }, 4, ON);
         }
 
         @Override public int sensors() { return SENSOR_HEADING; }
@@ -532,6 +734,10 @@ public final class Toys {
         }
 
         static void drawMoon(Frame f, double phase) {
+            Art.moon(f, phase, 11.4, ON);
+        }
+
+        static void drawMoonFlat(Frame f, double phase) {
             double r = 10.5;
             double k = Math.cos(2 * Math.PI * phase);
             for (int y = 0; y < 25; y++) {
@@ -610,24 +816,48 @@ public final class Toys {
         @Override public void render(Frame f, long now, Toy.Context ctx) {
             if (playing(now)) {
                 step(ctx, now);
-                ring(f, 1 - (now - start) / (double) GAME_MS, ON / 3);
-                f.max(foodX, foodY, (now / 150) % 2 == 0 ? ON : ON / 2);
+                ring(f, 1 - (now - start) / (double) GAME_MS, ON / 4);
+                drawFood(f, foodX, foodY, now);
                 drawFly(f, fx, fy, now);
             } else if (start != Long.MIN_VALUE && now - start < GAME_MS + SCORE_MS) {
-                Font.bigNumberCentred(f, Integer.toString(Math.min(score, 99)), 9, ON);
+                String n = Integer.toString(Math.min(score, 99));
+                int w = n.length() * 6 - 1, x = (25 - w) / 2;
+                for (char c : n.toCharArray()) {
+                    Font.boldDigit(f, c - '0', x, 9, ON);
+                    x += 6;
+                }
+                Font.textCentred(f, "YUM", 18, ON / 3);
             } else {
-                drawFly(f, C, C, now);
-                f.max(17, 8, ON / 2);
+                // Idle: the fly hovers round a sugar cube.
+                double a = now / 900.0;
+                drawFood(f, 15, 13, now);
+                drawFly(f, 11 + 3.5 * Math.cos(a), 12 + 2.5 * Math.sin(2 * a), now);
             }
         }
 
+        /** A sugar cube that glints. */
+        static void drawFood(Frame f, int x, int y, long now) {
+            int glint = (now / 300) % 4 == 0 ? ON : ON * 3 / 5;
+            f.max(x, y, glint);
+            f.max(x + 1, y, ON * 3 / 5);
+            f.max(x, y + 1, ON * 3 / 5);
+            f.max(x + 1, y + 1, ON * 2 / 5);
+        }
+
+        /** The fly: a dark-bright body, eyes, and wings that beat. */
         static void drawFly(Frame f, double x, double y, long now) {
             int cx = (int) Math.round(x), cy = (int) Math.round(y);
-            f.max(cx, cy, ON);
-            f.max(cx, cy + 1, ON);
-            int wing = (now / 80) % 2 == 0 ? ON / 2 : ON / 4;
-            f.max(cx - 1, cy - 1, wing);
-            f.max(cx + 1, cy - 1, wing);
+            f.max(cx, cy, ON);                 // thorax
+            f.max(cx, cy + 1, ON * 3 / 4);     // abdomen
+            f.max(cx, cy + 2, ON / 2);
+            f.max(cx - 1, cy - 1, ON);         // eyes
+            f.max(cx + 1, cy - 1, ON);
+            boolean up = (now / 60) % 2 == 0;
+            int wing = up ? ON / 2 : ON / 4;
+            f.max(cx - 1, cy + (up ? 0 : 1), wing);
+            f.max(cx + 1, cy + (up ? 0 : 1), wing);
+            f.max(cx - 2, cy + (up ? -1 : 1), wing / 2);
+            f.max(cx + 2, cy + (up ? -1 : 1), wing / 2);
         }
 
         @Override public int sensors() { return SENSOR_GRAVITY; }

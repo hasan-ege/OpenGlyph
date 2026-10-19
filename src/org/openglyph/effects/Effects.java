@@ -182,6 +182,11 @@ public final class Effects {
             this.theme = theme;
         }
 
+        /** The ringtone has just become audible: its melody starts over from here. */
+        public void restartTheme(long nowMs) {
+            if (theme != null) themeStartMs = nowMs;
+        }
+
         @Override public int priority() { return PRIORITY_CALL; }
 
         @Override public boolean isActive(long now) {
