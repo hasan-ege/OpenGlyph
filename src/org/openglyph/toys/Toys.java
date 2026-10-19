@@ -252,44 +252,19 @@ public final class Toys {
             double lat = Double.isNaN(ctx.latitude) ? 41.0 : ctx.latitude;
             double lon = Double.isNaN(ctx.longitude) ? ctx.utcOffsetHours * 15 : ctx.longitude;
             double hoursNow = Sky.solarHours(lon, ctx.epochMs);
-            // Crisp, on or off: night (below the horizon) is solid white; the day's path and
-            // the sun are lit above it and cut out (black) below it.
-            int[] py = new int[25];
-            for (int x = 0; x < 25; x++) {
-                double h = (x + 0.5) / 25 * 24;
-                long at = ctx.epochMs + (long) ((h - hoursNow) * 3600000);
-                py[x] = (int) Math.floor(yOf(Sky.sunElevation(lat, lon, at)));
-            }
+            // As the stock toy: night below the horizon is solid white, the sun a disc on its
+            // track across the day, lit in the dark sky and black in the white night.
             for (int y = HORIZON; y < 25; y++)
                 for (int x = 0; x < 25; x++)
                     if (MatrixLayout.exists(x, y)) f.set(x, y, ON);
-            for (int x = 0; x < 25; x++) {
-                // Join each column to the next so the path has no gaps.
-                int y0 = py[x], y1 = x < 24 ? py[x + 1] : py[x];
-                int lo = Math.min(y0, y1 + (y1 > y0 ? -1 : 0)), hi = Math.max(y0, y1 + (y1 < y0 ? 1 : 0));
-                if (x == 24) lo = hi = y0;
-                for (int y = Math.min(lo, y0); y <= Math.max(hi, y0); y++) pathPixel(f, x, y);
-            }
             double el = Sky.sunElevation(lat, lon, ctx.epochMs);
             double sx = hoursNow / 24.0 * 25, sy = yOf(el);
             for (int y = 0; y < 25; y++) {
                 for (int x = 0; x < 25; x++) {
                     if (!MatrixLayout.exists(x, y)) continue;
-                    double d = Math.hypot(x + 0.5 - sx, y + 0.5 - sy);
-                    boolean below = y >= HORIZON;
-                    if (d > 3.5) continue;
-                    // The sun: a filled disc, lit above the horizon and black below it, with a
-                    // gap of background round it so the path does not run into it.
-                    boolean sun = d <= 2.5;
-                    f.set(x, y, sun != below ? ON : 0);
+                    if (Math.hypot(x + 0.5 - sx, y + 0.5 - sy) <= 2.7) f.set(x, y, y < HORIZON ? ON : 0);
                 }
             }
-        }
-
-        /** A path LED: lit above the horizon, cut out of the white night below it. */
-        private static void pathPixel(Frame f, int x, int y) {
-            if (!MatrixLayout.exists(x, y)) return;
-            f.set(x, y, y < HORIZON ? ON : 0);
         }
 
         static double yOf(double elevation) {
