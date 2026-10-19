@@ -34,6 +34,7 @@ public final class HostTests {
         layout();
         sysfsSink();
         renderer();
+        rendererSurvivesFaults();
         effects();
         timerLed();
         recordingDetector();
@@ -555,6 +556,32 @@ public final class HostTests {
         low.clear();
         r.tick(40);
         check(sink.offs == 1, "powers off when nothing is active");
+    }
+
+    static void rendererSurvivesFaults() throws Exception {
+        FakeSink sink = new FakeSink();
+        Renderer r = new Renderer(sink, () -> 0);
+        int[] faults = {0};
+        r.setFaultListener((src, e) -> faults[0]++);
+        Effects.ClientFrame low = new Effects.ClientFrame(Effect.PRIORITY_TOY);
+        int[] a = new int[625];
+        java.util.Arrays.fill(a, Frame.MAX);
+        low.show(a);
+        Effect broken = new Effect() {
+            @Override public int priority() { return PRIORITY_CALL; }
+            @Override public boolean isActive(long now) { return true; }
+            @Override public long render(Frame f, long now) { throw new IllegalStateException("toy bug"); }
+        };
+        r.add(low);
+        r.add(broken);
+        long next = r.tick(0);
+        check(faults[0] == 1 && next == 0, "a throwing effect is reported, not fatal");
+        r.tick(0);
+        check(sink.shown.size() == 1 && sink.shown.get(0)[0] == 2047, "the next effect shows meanwhile");
+        r.tick(Renderer.REFRESH_MS + 1); // the broken effect is retried once and set aside again
+        r.tick(Renderer.REFRESH_MS + 1);
+        check(faults[0] == 2 && sink.shown.size() == 2,
+                "an unchanged frame is rewritten after the refresh period");
     }
 
     static void effects() {

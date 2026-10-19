@@ -28,6 +28,24 @@ public final class Renderer {
     private final int[] shown = new int[MatrixLayout.GRID_SIZE];
     private int brightness = 255; // user setting, 0..255
     private boolean lit;
+    /** Rewrite an unchanged frame this often, so a driver that lost its state recovers. */
+    static final long REFRESH_MS = 5000;
+    /** An effect that threw while drawing sits out this long; the next one shows meanwhile. */
+    static final long FAULT_PAUSE_MS = 5000;
+    private long lastWriteMs = Long.MIN_VALUE;
+    private boolean shutDown;
+    private final java.util.Map<Effect, Long> faulted = new java.util.HashMap<>();
+    private final java.util.Map<Effect, Integer> faultCount = new java.util.HashMap<>();
+
+    /** Told about effects that threw while drawing (the renderer itself carries on). */
+    public interface FaultListener {
+        void onFault(Object source, Throwable error);
+    }
+    private volatile FaultListener faultListener = (s, e) -> {};
+
+    public void setFaultListener(FaultListener l) {
+        faultListener = l;
+    }
     private boolean dirty = true;
     private Thread thread;
     private volatile boolean running;
@@ -44,6 +62,8 @@ public final class Renderer {
 
     public synchronized void remove(Effect effect) {
         effects.remove(effect);
+        faulted.remove(effect);
+        faultCount.remove(effect);
         invalidate();
     }
 
@@ -61,6 +81,11 @@ public final class Renderer {
     synchronized Effect winner(long now) {
         Effect best = null;
         for (Effect e : effects) {
+            Long pausedUntil = faulted.get(e);
+            if (pausedUntil != null) {
+                if (now < pausedUntil) continue;
+                faulted.remove(e);
+            }
             if (e.isActive(now) && (best == null || e.priority() > best.priority())) best = e;
         }
         return best;
@@ -90,7 +115,20 @@ public final class Renderer {
         }
 
         frame.clear();
-        long next = effect.render(frame, now);
+        long next;
+        try {
+            next = effect.render(frame, now);
+        } catch (RuntimeException e) {
+            // One broken effect (a toy, an animation) must not freeze the matrix: set it aside.
+            synchronized (this) {
+                // Each repeat doubles the pause (5 s, 10 s, ... up to a minute).
+                int n = faultCount.merge(effect, 1, Integer::sum);
+                faulted.put(effect, now + Math.min(60_000, FAULT_PAUSE_MS << Math.min(4, n - 1)));
+                dirty = true;
+            }
+            faultListener.onFault(effect, e);
+            return 0;
+        }
         synchronized (shown) {
             System.arraycopy(frame.px, 0, shown, 0, shown.length);
         }
@@ -98,10 +136,11 @@ public final class Renderer {
         for (int i = 0; i < leds.length; i++) {
             leds[i] = (int) ((long) leds[i] * SysfsMatrixSink.HW_MAX * brightness / (Frame.MAX * 255L));
         }
-        if (!lit || !java.util.Arrays.equals(leds, lastLeds)) {
+        if (!lit || !java.util.Arrays.equals(leds, lastLeds) || now - lastWriteMs >= REFRESH_MS) {
             sink.show(leds);
             System.arraycopy(leds, 0, lastLeds, 0, leds.length);
             lit = true;
+            lastWriteMs = now;
         }
         // An effect that expires must be noticed even if it asked for a static frame.
         return next < 0 ? 250 : Math.max(next, MIN_FRAME_MS);
@@ -114,6 +153,28 @@ public final class Renderer {
         }
     }
 
+    private volatile String lastSinkError;
+    private long lastSinkErrorReportMs = Long.MIN_VALUE / 2;
+
+    /** The state, for dumpsys. */
+    public synchronized String describe(long now) {
+        StringBuilder b = new StringBuilder();
+        Effect w = winner(now);
+        b.append("running=").append(running).append(" alive=")
+                .append(thread != null && thread.isAlive()).append(" brightness=").append(brightness)
+                .append(" lit=").append(lit).append(" lastWrite=").append(now - lastWriteMs)
+                .append("ms ago\nwinner=").append(w == null ? "none" : w.getClass().getName())
+                .append("\nlastSinkError=").append(lastSinkError).append("\neffects:\n");
+        for (Effect e : effects) {
+            b.append("  ").append(e.getClass().getName()).append(" prio=").append(e.priority())
+                    .append(" active=").append(e.isActive(now));
+            Long until = faulted.get(e);
+            if (until != null) b.append(" faulted(").append(until - now).append("ms)");
+            b.append('\n');
+        }
+        return b.toString();
+    }
+
     public synchronized void start() {
         if (running) return;
         running = true;
@@ -121,9 +182,19 @@ public final class Renderer {
         thread.start();
     }
 
+    /** Restarts the render thread if it died for any reason (cheap to call often). */
+    public synchronized void ensureRunning() {
+        if (shutDown) return;
+        if (running && thread != null && thread.isAlive()) return;
+        running = false;
+        start();
+        invalidate();
+    }
+
     public void stop() {
         Thread t;
         synchronized (this) {
+            shutDown = true;
             running = false;
             notifyAll();
             t = thread;
@@ -148,6 +219,17 @@ public final class Renderer {
                 wait = tick(clock.nowMs());
             } catch (IOException e) {
                 wait = 1000; // driver busy or node missing; retry rather than spin
+                lastSinkError = e.toString();
+                long now = clock.nowMs();
+                if (now - lastSinkErrorReportMs >= 60_000) { // say so, but not every second
+                    lastSinkErrorReportMs = now;
+                    faultListener.onFault(sink, e);
+                }
+            } catch (Throwable e) {
+                // Never let the render thread die: the matrix would freeze until Glyph is
+                // switched off and on again.
+                faultListener.onFault(this, e);
+                wait = 500;
             }
             synchronized (this) {
                 if (!running) break;
