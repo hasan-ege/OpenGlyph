@@ -26,7 +26,7 @@ public final class GlyphSettingsFragment extends GlyphFragment {
     /** Tile switches that map 1:1 to a flag (default on). */
     private static final String[] FLAGS = {
         GlyphSettings.TOYS, GlyphSettings.NOTIFICATIONS, GlyphSettings.CALLS,
-        GlyphSettings.CHARGING, GlyphSettings.RECORD_LED,
+        GlyphSettings.CHARGING, GlyphSettings.RECORD_LED, GlyphSettings.PROGRESS,
     };
 
     @Override
@@ -59,6 +59,30 @@ public final class GlyphSettingsFragment extends GlyphFragment {
                 (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.FLIP, on));
         tile(GlyphSettings.MUSIC).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.MUSIC),
                 (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.MUSIC, on));
+        tile(GlyphSettings.POCKET).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.POCKET),
+                (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.POCKET, on));
+        // Tapping Flip to Glyph picks what face down does: silent or vibrate.
+        tile(GlyphSettings.FLIP).setOnPreferenceClickListener(p -> {
+            String[] modes = {"SILENT", "VIBRATE"};
+            String current = GlyphSettings.string(cr, GlyphSettings.FLIP_MODE, "SILENT");
+            new android.app.AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.settings_flip_mode)
+                    .setSingleChoiceItems(new CharSequence[] {getString(R.string.settings_flip_silent),
+                            getString(R.string.settings_flip_vibrate)},
+                            "VIBRATE".equals(current) ? 1 : 0, (d, which) -> {
+                                Settings.Secure.putString(cr, GlyphSettings.FLIP_MODE, modes[which]);
+                                d.dismiss();
+                                refresh();
+                            })
+                    .show();
+            return true;
+        });
+        androidx.preference.TwoStatePreference auto = findPreference(GlyphSettings.AUTO_BRIGHTNESS);
+        auto.setOnPreferenceChangeListener((p, value) -> {
+            GlyphSettings.setFlag(cr, GlyphSettings.AUTO_BRIGHTNESS, (Boolean) value);
+            findPreference(GlyphSettings.BRIGHTNESS).setEnabled(!(Boolean) value);
+            return true;
+        });
         tile(GlyphSettings.AOD).setSwitch(false, (t, on) -> {
             String mode = GlyphSettings.string(cr, GlyphSettings.AOD, "OFF");
             if (on && "OFF".equals(mode)) mode = "ALWAYS";
@@ -105,6 +129,14 @@ public final class GlyphSettingsFragment extends GlyphFragment {
         for (String key : FLAGS) tile(key).setChecked(GlyphSettings.flag(cr, key));
         tile(GlyphSettings.FLIP).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP));
         tile(GlyphSettings.MUSIC).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.MUSIC));
+        tile(GlyphSettings.POCKET).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.POCKET));
+        tile(GlyphSettings.FLIP).setSummary("VIBRATE".equals(
+                GlyphSettings.string(cr, GlyphSettings.FLIP_MODE, "SILENT"))
+                ? R.string.settings_flip_vibrate_short : R.string.settings_flip_short);
+        boolean autoOn = GlyphSettings.flagDefaultOff(cr, GlyphSettings.AUTO_BRIGHTNESS);
+        ((androidx.preference.TwoStatePreference) findPreference(GlyphSettings.AUTO_BRIGHTNESS))
+                .setChecked(autoOn);
+        findPreference(GlyphSettings.BRIGHTNESS).setEnabled(!autoOn);
 
         // Toys: a strip of the active toys, like the stock tile.
         List<ToyCatalog.Entry> toys = ToyCatalog.all(c);

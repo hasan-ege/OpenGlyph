@@ -10,9 +10,10 @@ import android.os.Binder;
 import android.os.Bundle;
 
 /**
- * Lets the camera app show the recording light switch in its own settings. Only call() is
- * served: "get" returns {enabled}, "set" takes {enabled}. Callers must be a preinstalled
- * (system) camera app on the allow list; everyone else gets a SecurityException.
+ * The camera app's link to the Glyph: the recording light switch in its own settings, and its
+ * self-timer shown on the matrix. Only call() is served: "get" returns {enabled}, "set" takes
+ * {enabled}, "countdown" takes {seconds} (0 cancels). Callers must be a preinstalled (system)
+ * camera app on the allow list; everyone else gets a SecurityException.
  */
 public final class RecordLightProvider extends ContentProvider {
     static final String AUTHORITY = "org.openglyph.recordlight";
@@ -29,6 +30,11 @@ public final class RecordLightProvider extends ContentProvider {
         checkCaller();
         final long id = Binder.clearCallingIdentity();
         try {
+            if ("countdown".equals(method) && extras != null) {
+                GlyphService service = GlyphService.get();
+                if (service != null) service.onCameraCountdown(extras.getInt("seconds"));
+                return new Bundle();
+            }
             if ("set".equals(method) && extras != null) {
                 GlyphSettings.setFlag(getContext().getContentResolver(), GlyphSettings.RECORD_LED,
                         extras.getBoolean(KEY_ENABLED));

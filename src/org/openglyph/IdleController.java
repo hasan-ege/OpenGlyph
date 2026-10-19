@@ -164,16 +164,22 @@ final class IdleController implements SensorEventListener {
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
+    /** The mode Flip to Glyph switches to: silent (default) or vibrate. */
+    private int mFlipRingerMode = AudioManager.RINGER_MODE_SILENT;
+
     private void silenceRinger() {
         if (mSavedRingerMode >= 0) return;
+        mFlipRingerMode = "VIBRATE".equals(GlyphSettings.string(mContext.getContentResolver(),
+                GlyphSettings.FLIP_MODE, "SILENT"))
+                ? AudioManager.RINGER_MODE_VIBRATE : AudioManager.RINGER_MODE_SILENT;
         mSavedRingerMode = mAudio.getRingerMode();
-        mAudio.setRingerMode(AudioManager.RINGER_MODE_SILENT);
+        mAudio.setRingerMode(mFlipRingerMode);
     }
 
     private void restoreRinger() {
         if (mSavedRingerMode < 0) return;
         // Only undo our own change: if the user picked another mode meanwhile, keep theirs.
-        if (mAudio.getRingerMode() == AudioManager.RINGER_MODE_SILENT) {
+        if (mAudio.getRingerMode() == mFlipRingerMode) {
             mAudio.setRingerMode(mSavedRingerMode);
         }
         mSavedRingerMode = -1;

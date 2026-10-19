@@ -190,20 +190,57 @@ final class MirrorCamera {
             ByteBuffer buf = image.getPlanes()[0].getBuffer();
             byte[] jpeg = new byte[buf.remaining()];
             buf.get(jpeg);
-            ContentValues v = new ContentValues();
-            v.put(MediaStore.Images.Media.DISPLAY_NAME,
-                    "IMG_GLYPH_" + System.currentTimeMillis() + ".jpg");
-            v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-            v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera");
-            Uri uri = mContext.getContentResolver().insert(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) return;
-            try (OutputStream out = mContext.getContentResolver().openOutputStream(uri)) {
-                out.write(jpeg);
-            }
-            Log.i(TAG, "photo saved: " + uri);
+            String name = "IMG_GLYPH_" + System.currentTimeMillis();
+            // The photo as the camera took it, and the selfie as seen in the Glyph mirror.
+            save(name + ".jpg", jpeg);
+            byte[] mirrored = mirrored(jpeg);
+            if (mirrored != null) save(name + "_MIRROR.jpg", mirrored);
         } catch (Exception e) {
             Log.w(TAG, "saving photo failed", e);
+        }
+    }
+
+    private void save(String name, byte[] jpeg) throws java.io.IOException {
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.Images.Media.DISPLAY_NAME, name);
+        v.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera");
+        Uri uri = mContext.getContentResolver().insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
+        if (uri == null) return;
+        try (OutputStream out = mContext.getContentResolver().openOutputStream(uri)) {
+            out.write(jpeg);
+        }
+        Log.i(TAG, "photo saved: " + uri);
+    }
+
+    /** The photo upright (EXIF orientation applied) and flipped left-right, as a JPEG. */
+    private static byte[] mirrored(byte[] jpeg) {
+        try {
+            int orientation = new android.media.ExifInterface(new java.io.ByteArrayInputStream(jpeg))
+                    .getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION,
+                            android.media.ExifInterface.ORIENTATION_NORMAL);
+            int degrees = switch (orientation) {
+                case android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90;
+                case android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180;
+                case android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270;
+                default -> 0;
+            };
+            android.graphics.Bitmap photo = android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
+            if (photo == null) return null;
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            m.postRotate(degrees);
+            m.postScale(-1, 1);
+            android.graphics.Bitmap out = android.graphics.Bitmap.createBitmap(photo, 0, 0,
+                    photo.getWidth(), photo.getHeight(), m, true);
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            out.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, bytes);
+            photo.recycle();
+            out.recycle();
+            return bytes.toByteArray();
+        } catch (Exception | OutOfMemoryError e) {
+            Log.w(TAG, "mirrored copy failed", e);
+            return null;
         }
     }
 

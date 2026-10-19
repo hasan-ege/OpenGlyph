@@ -16,6 +16,16 @@
     <string name="settings_features">Özellikler</string>
     <string name="settings_flip">Flip to Glyph</string>
     <string name="settings_flip_short">Yüzüstü koyunca zil susar</string>
+    <string name="settings_flip_vibrate_short">Yüzüstü: yalnızca titreşim</string>
+    <string name="settings_flip_mode">Yüzüstü koyunca</string>
+    <string name="settings_flip_silent">Sessiz</string>
+    <string name="settings_flip_vibrate">Titreşim</string>
+    <string name="settings_pocket">Cep modu</string>
+    <string name="settings_progress">Glyph Progress</string>
+    <string name="settings_progress_short">Canlı güncellemeler kaydırıcı olarak</string>
+    <string name="settings_pocket_short">Cepteyken kapalı</string>
+    <string name="settings_auto_brightness">Otomatik parlaklık</string>
+    <string name="settings_auto_brightness_summary">Karanlıkta kısık, gün ışığında parlak</string>
     <string name="settings_aod_toy_tile">Her Zaman Açık Glyph Oyuncağı</string>
     <string name="settings_calls">Gelen aramalar</string>
     <string name="settings_calls_short">Çalarken halkalar</string>
@@ -147,6 +157,8 @@
     <string name="toy_leveller_summary">Kabarcıklı terazi. Yüzey düzse parlar</string>
     <string name="toy_compass">Pusula</string>
     <string name="toy_compass_summary">İbre kuzeyi gösterir</string>
+    <string name="toy_hourglass">Kum Saati</string>
+    <string name="toy_hourglass_summary">Saat uygulamasındaki zamanlayıcın akan kumla</string>
     <string name="toy_moon">Ay Evresi</string>
     <string name="toy_moon_summary">Bu gecenin ayı</string>
     <string name="toy_fly">Sineği Besle</string>

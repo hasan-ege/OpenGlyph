@@ -22,6 +22,12 @@
         app:updatesContinuously="true"
         android:persistent="false" />
 
+    <SwitchPreferenceCompat
+        android:key="open_glyph_auto_brightness"
+        android:title="@string/settings_auto_brightness"
+        android:summary="@string/settings_auto_brightness_summary"
+        android:persistent="false" />
+
     <PreferenceCategory
         android:key="toys_category"
         android:title="@string/settings_toys">
@@ -95,6 +101,14 @@
             app:tileSwitch="true" />
 
         <org.openglyph.TilePreference
+            android:key="open_glyph_progress"
+            android:title="@string/settings_progress"
+            android:summary="@string/settings_progress_short"
+            android:icon="@drawable/ic_og_progress"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
             android:key="open_glyph_record_led"
             android:title="@string/settings_record_led"
             android:summary="@string/settings_record_led_summary"
@@ -111,6 +125,15 @@
             android:key="open_glyph_bedtime"
             android:title="@string/settings_bedtime"
             android:icon="@drawable/ic_og_bedtime"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
+            android:key="open_glyph_pocket"
+            android:title="@string/settings_pocket"
+            android:summary="@string/settings_pocket_short"
+            android:icon="@drawable/ic_og_pocket"
+            app:tileHalf="true"
             app:tileSwitch="true" />
     </PreferenceCategory>
 

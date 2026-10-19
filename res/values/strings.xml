@@ -18,6 +18,16 @@
     <string name="settings_features">Features</string>
     <string name="settings_flip">Flip to Glyph</string>
     <string name="settings_flip_short">Face down silences the ringer</string>
+    <string name="settings_flip_vibrate_short">Face down: vibrate only</string>
+    <string name="settings_flip_mode">Face down</string>
+    <string name="settings_flip_silent">Silent</string>
+    <string name="settings_flip_vibrate">Vibrate</string>
+    <string name="settings_pocket">Pocket mode</string>
+    <string name="settings_progress">Glyph Progress</string>
+    <string name="settings_progress_short">Live Updates as a slider</string>
+    <string name="settings_pocket_short">Off in your pocket</string>
+    <string name="settings_auto_brightness">Automatic brightness</string>
+    <string name="settings_auto_brightness_summary">Dimmer in the dark, brighter in daylight</string>
     <string name="settings_aod_toy_tile">Always-on Glyph Toy</string>
     <string name="settings_calls">Incoming calls</string>
     <string name="settings_calls_short">Rings while ringing</string>
@@ -157,6 +167,8 @@
     <string name="toy_leveller_summary">A bubble level. Lights up when the surface is flat</string>
     <string name="toy_compass">Compass</string>
     <string name="toy_compass_summary">The needle points north</string>
+    <string name="toy_hourglass">Hourglass</string>
+    <string name="toy_hourglass_summary">Your Clock timer as falling sand</string>
     <string name="toy_moon">Moon Phase</string>
     <string name="toy_moon_summary">Tonight\'s moon</string>
     <string name="toy_fly">Feed The Fly</string>

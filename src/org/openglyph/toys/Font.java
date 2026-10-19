@@ -91,7 +91,7 @@ final class Font {
     }
 
     // 3x5 upper-case text, for short messages (Magic 8 Ball, scores).
-    private static final String TEXT_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!-'";
+    private static final String TEXT_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.?!-'+";
     private static final String[][] TEXT_ROWS = {
         {".#.", "#.#", "###", "#.#", "#.#"}, {"##.", "#.#", "##.", "#.#", "##."},
         {".##", "#..", "#..", "#..", ".##"}, {"##.", "#.#", "#.#", "#.#", "##."},
@@ -113,8 +113,31 @@ final class Font {
         {"###", "#.#", "###", "#.#", "###"}, {"###", "#.#", "###", "..#", "###"},
         {"...", "...", "...", "...", ".#."}, {"##.", "..#", ".#.", "...", ".#."},
         {".#.", ".#.", ".#.", "...", ".#."}, {"...", "...", "###", "...", "..."},
-        {".#.", ".#.", "...", "...", "..."},
+        {".#.", ".#.", "...", "...", "..."}, {"...", ".#.", "###", ".#.", "..."},
     };
+
+    /** Letters the 3x5 font lacks, as their nearest plain letter (Turkish and Latin accents). */
+    static String plain(String s) {
+        String n = java.text.Normalizer.normalize(s.replace("ı", "i").replace("İ", "I"),
+                java.text.Normalizer.Form.NFD);
+        return n.replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /** {@link #text} at twice the size (6x10 per letter, 8 px apart). */
+    static void bigText(Frame f, String s, int x, int y, int value) {
+        for (int i = 0; i < s.length(); i++) {
+            int k = TEXT_CHARS.indexOf(Character.toUpperCase(s.charAt(i)));
+            if (k < 0) continue;
+            String[] rows = TEXT_ROWS[k];
+            for (int r = 0; r < rows.length; r++) {
+                for (int c = 0; c < rows[r].length(); c++) {
+                    if (rows[r].charAt(c) != '#') continue;
+                    int px = x + i * 8 + c * 2, py = y + r * 2;
+                    for (int d = 0; d < 4; d++) f.set(px + (d & 1), py + (d >> 1), value);
+                }
+            }
+        }
+    }
 
     /** Width in pixels of text drawn with {@link #text}. */
     static int textWidth(String s) {

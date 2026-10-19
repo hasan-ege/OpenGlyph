@@ -30,6 +30,29 @@ public final class GlyphNotificationListener extends NotificationListenerService
     /** Keys currently showing, so updates to ONLY_ALERT_ONCE notifications stay quiet. */
     private final Set<String> mShowing = new HashSet<>();
 
+    /**
+     * The caller of the ringing call as the Phone app's incoming-call notification shows it:
+     * the contact's name, or the number when they are not in contacts; null if none.
+     */
+    static String callerName() {
+        GlyphNotificationListener l = sInstance;
+        if (l == null) return null;
+        StatusBarNotification[] active = l.getActiveNotifications();
+        if (active == null) return null;
+        for (StatusBarNotification sbn : active) {
+            Notification n = sbn.getNotification();
+            if (!Notification.CATEGORY_CALL.equals(n.category)) continue;
+            android.app.Person p = n.extras.getParcelable(Notification.EXTRA_CALL_PERSON,
+                    android.app.Person.class);
+            if (p != null && p.getName() != null && p.getName().length() > 0) {
+                return p.getName().toString();
+            }
+            CharSequence title = n.extras.getCharSequence(Notification.EXTRA_TITLE);
+            if (title != null && title.length() > 0) return title.toString();
+        }
+        return null;
+    }
+
     /** Re-scans after the essential-apps setting changed. */
     static void refreshEssential() {
         GlyphNotificationListener l = sInstance;
@@ -42,6 +65,7 @@ public final class GlyphNotificationListener extends NotificationListenerService
         StatusBarNotification[] active = getActiveNotifications();
         if (active != null) for (StatusBarNotification sbn : active) mShowing.add(sbn.getKey());
         updateEssential();
+        updateProgress();
     }
 
     @Override
@@ -53,6 +77,7 @@ public final class GlyphNotificationListener extends NotificationListenerService
     public void onNotificationPosted(StatusBarNotification sbn, RankingMap rankingMap) {
         boolean seen = !mShowing.add(sbn.getKey());
         updateEssential();
+        updateProgress();
         Notification n = sbn.getNotification();
         if (sbn.isOngoing() || !sbn.isClearable()) return;
         if ((n.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
@@ -71,6 +96,68 @@ public final class GlyphNotificationListener extends NotificationListenerService
     public void onNotificationRemoved(StatusBarNotification sbn) {
         mShowing.remove(sbn.getKey());
         updateEssential();
+        updateProgress();
+    }
+
+    /** The Clock app's countdown timer notification (one or more timers). */
+    private static boolean isClockTimer(StatusBarNotification sbn) {
+        Notification n = sbn.getNotification();
+        return "com.android.deskclock".equals(sbn.getPackageName())
+                && n.extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
+                && (n.flags & Notification.FLAG_GROUP_SUMMARY) == 0;
+    }
+
+    /**
+     * Glyph Progress: the newest Live Update (Android 16 promoted ongoing notification, e.g.
+     * Notification.ProgressStyle) that carries progress goes to the matrix; none clears it.
+     */
+    private void updateProgress() {
+        GlyphService service = GlyphService.get();
+        if (service == null) return;
+        StatusBarNotification[] active;
+        try {
+            active = getActiveNotifications();
+        } catch (SecurityException e) {
+            return;
+        }
+        StatusBarNotification newest = null;
+        StatusBarNotification timer = null;
+        if (active != null) {
+            for (StatusBarNotification sbn : active) {
+                Notification n = sbn.getNotification();
+                if (isClockTimer(sbn)) {
+                    timer = sbn; // the hourglass shows it, not the slider
+                    continue;
+                }
+                boolean live = (n.flags & Notification.FLAG_PROMOTED_ONGOING) != 0
+                        || n.isStyle(Notification.ProgressStyle.class);
+                boolean hasProgress = n.extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
+                        || n.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE);
+                if (!live || !hasProgress) continue;
+                if (newest == null || sbn.getPostTime() > newest.getPostTime()) newest = sbn;
+            }
+        }
+        if (timer == null) {
+            org.openglyph.toys.Hourglass.timerGone();
+        } else {
+            Notification n = timer.getNotification();
+            if (n.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)) {
+                org.openglyph.toys.Hourglass.timerRunning(n.when, System.currentTimeMillis());
+            } else {
+                org.openglyph.toys.Hourglass.timerPaused(n.when - timer.getPostTime());
+            }
+        }
+        service.onTimerChanged();
+        if (newest == null) {
+            service.onLiveProgress(-1, false);
+            return;
+        }
+        android.os.Bundle ex = newest.getNotification().extras;
+        int max = ex.getInt(Notification.EXTRA_PROGRESS_MAX, 0);
+        boolean indeterminate = ex.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) || max <= 0;
+        int pct = indeterminate ? 0
+                : Math.max(0, Math.min(100, Math.round(100f * ex.getInt(Notification.EXTRA_PROGRESS, 0) / max)));
+        service.onLiveProgress(pct, indeterminate);
     }
 
     private void updateEssential() {

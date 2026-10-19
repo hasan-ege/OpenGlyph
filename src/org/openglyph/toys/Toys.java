@@ -20,7 +20,7 @@ public final class Toys {
     /** The built-in toys in their default Glyph Button order; "off" is always last. */
     public static List<Toy> all() {
         return List.of(new Clock(), new Battery(), new SolarPath(), new Mirror(), new Bottle(),
-                new RockPaperScissors(), new Magic8(), new Stopwatch(), new Leveller(),
+                new RockPaperScissors(), new Magic8(), new Stopwatch(), new Hourglass(), new Leveller(),
                 new Compass(), new MoonPhase(), new FeedTheFly(), new Off());
     }
 
@@ -156,7 +156,10 @@ public final class Toys {
      * Long press asks the host to take the picture.
      */
     public static final class Mirror implements Toy {
+        /** Long press: count down this long on the matrix, then take the photo. */
+        public static final long COUNTDOWN_MS = 3000;
         private volatile boolean captureRequested;
+        private volatile long shotAt = Long.MIN_VALUE;
 
         @Override public String id() { return "mirror"; }
 
@@ -164,12 +167,21 @@ public final class Toys {
             if (ctx.camera == null) {
                 circle(f, C, C, 5, DIM);
                 disc(f, C, C, 2, DIM);
-                return;
+            } else {
+                f.setGrid(ctx.camera);
             }
-            f.setGrid(ctx.camera);
+            long left = shotAt - now;
+            if (shotAt != Long.MIN_VALUE && left > 0) {
+                // Dim the picture so the digits read, then count down over it.
+                f.dim(3);
+                Countdown.draw(f, left, COUNTDOWN_MS);
+            }
         }
 
-        @Override public void onLongPress(long now) { captureRequested = true; }
+        @Override public void onLongPress(long now) {
+            captureRequested = true;
+            shotAt = now + COUNTDOWN_MS;
+        }
 
         /** True once after a long press: the host takes a photo. */
         public boolean takeCaptureRequest() {

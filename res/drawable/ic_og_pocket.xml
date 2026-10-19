@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pocket mode: a pocket with a phone tucked in. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?android:attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9,2h6a1,1 0,0 1,1 1v6h-2V4h-4v5H8V3a1,1 0,0 1,1 -1z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,9h16v6c0,3.87 -3.58,7 -8,7s-8,-3.13 -8,-7V9zM6,11v4c0,2.76 2.69,5 6,5s6,-2.24 6,-5v-4H6z" />
+</vector>

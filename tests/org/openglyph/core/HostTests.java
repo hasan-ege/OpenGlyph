@@ -40,6 +40,7 @@ public final class HostTests {
         toys();
         nothingStyleFeatures();
         stockToys();
+        hourglass();
         generative();
         remoteToys();
         System.out.println(failures == 0 ? "\nALL PASSED" : "\n" + failures + " FAILED");
@@ -287,13 +288,40 @@ public final class HostTests {
         check(new Effects.NotificationPulse().priority() > idle.priority(), "notifications draw over idle");
     }
 
+    static void hourglass() {
+        org.openglyph.toys.Hourglass toy = new org.openglyph.toys.Hourglass();
+        org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
+        long epoch = 1_800_000_000_000L;
+        org.openglyph.toys.Hourglass.timerRunning(epoch + 60_000, epoch);
+        int[] start = sandHalves(toy, ctx, epoch, 0);
+        int[] half = sandHalves(toy, ctx, epoch + 30_000, 30_000);
+        check(start[1] == 0 && start[0] > 30, "hourglass starts with all sand on top: " + start[0]);
+        check(half[0] + half[1] == start[0], "hourglass keeps every grain: " + (half[0] + half[1]));
+        check(Math.abs(half[1] - start[0] / 2) <= 2, "half way, half the sand is below: " + half[1]);
+        org.openglyph.toys.Hourglass.timerGone();
+    }
+
+    /** {grains above the neck, grains below} as the toy draws them. */
+    static int[] sandHalves(org.openglyph.toys.Toy toy, org.openglyph.toys.Toy.Context ctx,
+            long epoch, long nowMs) {
+        ctx.epochMs = epoch;
+        Frame f = new Frame();
+        toy.render(f, nowMs, ctx);
+        int top = 0, bottom = 0;
+        for (int k = 0; k < 625; k++) {
+            if (f.px[k] != Frame.MAX) continue;
+            if (k / 25 < 12) top++; else if (k / 25 > 12) bottom++;
+        }
+        return new int[] {top, bottom};
+    }
+
     static void stockToys() {
         java.util.List<org.openglyph.toys.Toy> all = org.openglyph.toys.Toys.all();
         java.util.List<String> ids = new ArrayList<>();
         for (org.openglyph.toys.Toy t : all) ids.add(t.id());
         check(ids.equals(java.util.List.of("clock", "battery", "solar", "mirror", "bottle", "rps",
-                "magic8", "stopwatch", "leveller", "compass", "moon", "fly", "off")),
-                "the stock Phone (3) toy set, Off last: " + ids);
+                "magic8", "stopwatch", "hourglass", "leveller", "compass", "moon", "fly", "off")),
+                "the stock Phone (3) toy set (Nothing OS 4: + Hourglass), Off last: " + ids);
         org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
         ctx.hour = 21; ctx.minute = 58; ctx.batteryPercent = 64;
         ctx.epochMs = 1760781600000L; // 2025-10-18 10:00 UTC

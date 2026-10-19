@@ -40,6 +40,10 @@ final class GlyphSettings {
     static final String TOY_ORDER = "open_glyph_toy_order_v2";
     static final String MUSIC = "open_glyph_music";                  // 1/0, default 0
     static final String GEN_SOUNDS = "open_glyph_generative_sounds"; // 1/0, default 0
+    static final String FLIP_MODE = "open_glyph_flip_mode";          // SILENT|VIBRATE, default SILENT
+    static final String POCKET = "open_glyph_pocket";                // 1/0, default 0
+    static final String PROGRESS = "open_glyph_progress";            // 1/0, default 1
+    static final String AUTO_BRIGHTNESS = "open_glyph_auto_brightness"; // 1/0, default 0
     /** Read by Telecom (RingtoneFactory) too: each caller rings with their own generative sound. */
     static final String GEN_RINGTONE = "open_glyph_generative_ringtone"; // 1/0, default 0
     static final String SEED = "open_glyph_seed";                    // text, random per device
@@ -48,7 +52,7 @@ final class GlyphSettings {
     static final String[] ALL = {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
-        AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, GEN_RINGTONE, ENGINE, SEED,
+        AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, GEN_RINGTONE, FLIP_MODE, POCKET, AUTO_BRIGHTNESS, PROGRESS, ENGINE, SEED,
     };
 
     private GlyphSettings() {}

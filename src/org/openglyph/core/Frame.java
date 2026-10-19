@@ -37,6 +37,11 @@ public final class Frame {
     }
 
     /** Copies a 625-entry row-major grid, clamping each value. */
+    /** Divides every pixel by {@code divisor} (to draw something readable on top). */
+    public void dim(int divisor) {
+        for (int i = 0; i < px.length; i++) px[i] /= divisor;
+    }
+
     public void setGrid(int[] grid) {
         if (grid.length != MatrixLayout.GRID_SIZE) {
             throw new IllegalArgumentException("expected " + MatrixLayout.GRID_SIZE + " pixels");

@@ -63,9 +63,32 @@ public final class GlyphService extends Service {
     private final Effects.NotificationPulse mPulse = new Effects.NotificationPulse();
     private final Effects.ChargingLevel mCharging = new Effects.ChargingLevel();
     private final Effects.IncomingCall mCall = new Effects.IncomingCall();
+    private final org.openglyph.toys.CallerId mCallerId = new org.openglyph.toys.CallerId();
+    private volatile boolean mRinging;
+    private final org.openglyph.toys.ProgressBar mProgress = new org.openglyph.toys.ProgressBar();
+    private final org.openglyph.toys.Countdown mCountdown = new org.openglyph.toys.Countdown();
+
+    /** The camera app's self-timer started (seconds) or was cancelled (0). */
+    void onCameraCountdown(int seconds) {
+        mCountdown.start(seconds, SystemClock.uptimeMillis());
+        mRenderer.invalidate();
+    }
+
+    /** The Clock timer changed (started, paused, +1 min, gone): redraw the hourglass. */
+    void onTimerChanged() {
+        mRenderer.invalidate();
+    }
+
+    /** From the notification listener: the newest Live Update's progress, or -1 for none. */
+    void onLiveProgress(int percent, boolean indeterminate) {
+        boolean on = GlyphSettings.flag(getContentResolver(), GlyphSettings.PROGRESS);
+        mProgress.set(on ? percent : -1, indeterminate);
+        mRenderer.invalidate();
+    }
     private Renderer mRenderer;
     private TelephonyManager mTelephony;
     private RecordingLedController mRecordLed;
+    private AmbientController mAmbient;
     private final ToyHost mToys = new ToyHost(this::toyContext,
             Toys.all().toArray(new Toy[0]));
     private static final int BUILT_IN_TOYS = Toys.all().size();
@@ -112,6 +135,9 @@ public final class GlyphService extends Service {
         mRenderer.add(mPulse);
         mRenderer.add(mCharging);
         mRenderer.add(mCall);
+        mRenderer.add(mCallerId);
+        mRenderer.add(mProgress);
+        mRenderer.add(mCountdown);
         mRenderer.add(mToys);
         mRenderer.add(mIdle);
         mRenderer.add(mMusicBars);
@@ -120,6 +146,7 @@ public final class GlyphService extends Service {
         mSounds = new GenerativeSounds(this);
         mMusic = new MusicVisualizer(this, mHandler, mMusicBars, () -> mRenderer.invalidate());
         mIdleController = new IdleController(this, mHandler, mIdle, mRenderer::invalidate);
+        mAmbient = new AmbientController(this, mHandler, () -> mHandler.post(this::applyBrightness));
         applySettings();
         for (String key : GlyphSettings.ALL) {
             getContentResolver().registerContentObserver(
@@ -178,6 +205,7 @@ public final class GlyphService extends Service {
         getContentResolver().unregisterContentObserver(mSettingsObserver);
         mRecordLed.stop();
         mIdleController.stop();
+        mAmbient.stop();
         mToyBridge.stop();
         mMusic.stop();
         mToySensors.stop();
@@ -246,11 +274,20 @@ public final class GlyphService extends Service {
 
     private void applyBrightness() {
         boolean enabled = GlyphSettings.flag(getContentResolver(), GlyphSettings.ENABLED);
-        mRenderer.setBrightness(enabled && !mBedtime
-                ? GlyphSettings.brightness(getContentResolver()) : 0);
+        boolean dark = mBedtime || (mAmbient != null && mAmbient.inPocket());
+        int level = mAmbient != null && mAmbient.autoOn()
+                ? mAmbient.autoBrightness() : GlyphSettings.brightness(getContentResolver());
+        mRenderer.setBrightness(enabled && !dark ? level : 0);
     }
 
     private void applySettings() {
+        if (mAmbient != null) mAmbient.update();
+        // A running Clock timer shows as the hourglass on its own while Glyph Progress is on.
+        if (GlyphSettings.flag(getContentResolver(), GlyphSettings.PROGRESS)) {
+            mRenderer.add(org.openglyph.toys.Hourglass.effect());
+        } else {
+            mRenderer.remove(org.openglyph.toys.Hourglass.effect());
+        }
         applyBrightness();
         List<String> order = new ArrayList<>(GlyphSettings.activeToys(getContentResolver()));
         order.add(GlyphSettings.OFF);
@@ -466,12 +503,18 @@ public final class GlyphService extends Service {
             Log.d(TAG, "Glyph Button " + event);
             boolean toys = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS);
             long now = SystemClock.uptimeMillis();
-            if ("tap".equals(event)) {
+            if ("tap".equals(event) && mRinging) {
+                // Ringing: a short press shows who is calling instead of the next toy.
+                String caller = GlyphNotificationListener.callerName();
+                if (caller != null) mCallerId.show(caller, now);
+            } else if ("tap".equals(event)) {
                 if (toys) mToys.onTap(now); else showBatteryLevel();
             } else if ("long_press".equals(event) && toys) {
                 mToys.onLongPress(now);
                 if (mToys.selected() instanceof Toys.Mirror m && m.takeCaptureRequest()) {
-                    mMirror.capture();
+                    // The toy counts down 3-2-1 on the matrix; the photo is taken at 0.
+                    mHandler.removeCallbacks(mMirrorShot);
+                    mHandler.postDelayed(mMirrorShot, Toys.Mirror.COUNTDOWN_MS);
                 }
             } else if ("down".equals(event) && toys) {
                 mToys.onButtonDown(now);
@@ -498,6 +541,7 @@ public final class GlyphService extends Service {
     }
 
     private final Runnable mSensorCheck = this::updateToySensors;
+    private final Runnable mMirrorShot = () -> mMirror.capture();
 
     private final class CallState extends TelephonyCallback
             implements TelephonyCallback.CallStateListener {
@@ -506,6 +550,8 @@ public final class GlyphService extends Service {
             boolean show = GlyphSettings.flag(getContentResolver(), GlyphSettings.CALLS);
             mCall.setRinging(show && state == TelephonyManager.CALL_STATE_RINGING,
                     SystemClock.uptimeMillis());
+            mRinging = state == TelephonyManager.CALL_STATE_RINGING;
+            if (!mRinging) mCallerId.hide();
             mRenderer.invalidate();
         }
     }
