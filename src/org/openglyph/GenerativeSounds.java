@@ -107,31 +107,44 @@ final class GenerativeSounds {
     private static final long RING_PAUSE_MS = 700;
     private static final long MIN_RING_PERIOD_MS = 2200;
 
+    private static final String RING_FOLDER = Environment.DIRECTORY_RINGTONES + "/OpenGlyph/";
+
     /**
-     * The caller's ringtone as a WAV in our cache (made on first use, per seed and engine):
-     * the theme's melody padded with silence to one ring period, for the ringer to loop.
+     * The caller's ringtone in MediaStore (Ringtones/OpenGlyph), made on first use: Telecom
+     * (system_server) and SystemUI's ringtone player can both read media files, while a file in
+     * our own storage is out of their reach (SELinux). Null before the first unlock.
      */
-    synchronized java.io.File ringtoneFile(String callerKey) throws java.io.IOException {
-        Generative.Theme theme = callerTheme(callerKey);
-        java.io.File dir = new java.io.File(mContext.getCacheDir(), "ringtones");
-        String stamp = Integer.toHexString((VERSION + ":" + deviceSeed(mContext.getContentResolver())
-                + ":" + engine()).hashCode());
-        java.io.File file = new java.io.File(dir, stamp + "-" + callerKey + ".wav");
-        if (file.isFile()) return file;
-        java.io.File[] old = dir.listFiles();
-        if (old != null) {
-            for (java.io.File f : old) if (!f.getName().startsWith(stamp + "-")) f.delete();
+    synchronized Uri ringtoneUri(String callerKey) {
+        if (!unlocked()) return null;
+        String key = "ring:" + stamp() + ":" + callerKey;
+        String saved = mPrefs.getString(key, null);
+        if (saved != null && exists(Uri.parse(saved))) return Uri.parse(saved);
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.Audio.Media.DISPLAY_NAME, "OpenGlyph caller " + callerKey.substring(0, 12) + ".wav");
+        v.put(MediaStore.Audio.Media.TITLE, "OpenGlyph caller");
+        v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/x-wav");
+        v.put(MediaStore.Audio.Media.RELATIVE_PATH, RING_FOLDER);
+        v.put(MediaStore.Audio.Media.IS_RINGTONE, 1);
+        v.put(MediaStore.Audio.Media.IS_PENDING, 1);
+        ContentResolver cr = mContext.getContentResolver();
+        Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
+        if (uri == null) return null;
+        try (OutputStream out = cr.openOutputStream(uri)) {
+            Generative.Theme theme = callerTheme(callerKey);
+            short[] melody = theme.synth();
+            int total = (int) (ringPeriodMs(theme) * SAMPLE_RATE / 1000);
+            out.write(Generative.wav(java.util.Arrays.copyOf(melody, Math.max(total, melody.length)),
+                    SAMPLE_RATE));
+        } catch (Exception e) {
+            Log.w(TAG, "writing ringtone failed", e);
+            cr.delete(uri, null, null);
+            return null;
         }
-        dir.mkdirs();
-        short[] melody = theme.synth();
-        int total = (int) (ringPeriodMs(theme) * SAMPLE_RATE / 1000);
-        short[] ring = java.util.Arrays.copyOf(melody, Math.max(total, melody.length));
-        java.io.File tmp = new java.io.File(dir, file.getName() + ".tmp");
-        try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
-            out.write(Generative.wav(ring, SAMPLE_RATE));
-        }
-        if (!tmp.renameTo(file)) throw new java.io.IOException("cannot save " + file);
-        return file;
+        ContentValues done = new ContentValues();
+        done.put(MediaStore.Audio.Media.IS_PENDING, 0);
+        cr.update(uri, done, null, null);
+        mPrefs.edit().putString(key, uri.toString()).commit();
+        return uri;
     }
 
     /** Plays an app's sound now (Settings preview). */
