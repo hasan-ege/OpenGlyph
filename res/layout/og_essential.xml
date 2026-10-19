@@ -1,46 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Settings > Essential Key: swipe to the action the key should run. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Settings > Essential Key: swipe to the action the key should run. Lives under the SettingsLib
+     collapsing toolbar like every other Glyph screen, in the theme's colours. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/og_ek_bg"
-    android:fitsSystemWindows="true">
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="8dp">
-
-            <ImageButton
-                android:id="@+id/ek_back"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@android:string/cancel"
-                android:src="@drawable/ic_ek_back" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="@string/ek_title"
-                android:textColor="#FFFFFFFF"
-                android:textSize="20sp" />
-        </LinearLayout>
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/ek_carousel"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="300dp"
             android:clipToPadding="false"
+            android:nestedScrollingEnabled="false"
             android:overScrollMode="never" />
 
         <LinearLayout
@@ -54,11 +31,10 @@
             android:id="@+id/ek_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
+            android:layout_marginTop="16dp"
             android:gravity="center"
-            android:textColor="#FFFFFFFF"
-            android:textSize="28sp"
-            android:textStyle="bold" />
+            android:textAppearance="?android:attr/textAppearanceLarge"
+            android:textColor="?android:attr/textColorPrimary" />
 
         <TextView
             android:id="@+id/ek_desc"
@@ -69,8 +45,8 @@
             android:minLines="2"
             android:paddingStart="32dp"
             android:paddingEnd="32dp"
-            android:textColor="#FFB5B5B5"
-            android:textSize="15sp" />
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="?android:attr/textColorSecondary" />
 
         <LinearLayout
             android:id="@+id/ek_options"
@@ -90,8 +66,7 @@
             android:paddingStart="28dp"
             android:paddingEnd="28dp"
             android:textAllCaps="false"
-            android:textColor="#FFFFFFFF"
-            android:textSize="16sp" />
+            android:textColor="?android:attr/textColorPrimaryInverse" />
 
         <TextView
             android:layout_width="match_parent"
@@ -99,8 +74,8 @@
             android:layout_marginTop="28dp"
             android:gravity="center"
             android:text="@string/ek_trigger"
-            android:textColor="#FF8A8A8A"
-            android:textSize="13sp" />
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="?android:attr/textColorSecondary" />
 
         <LinearLayout
             android:id="@+id/ek_trigger"
@@ -108,7 +83,6 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="8dp"
-            android:layout_marginBottom="28dp"
             android:orientation="horizontal" />
     </LinearLayout>
-</FrameLayout>
+</androidx.core.widget.NestedScrollView>

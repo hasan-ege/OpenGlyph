@@ -6,7 +6,7 @@
     <FrameLayout
         android:id="@+id/ek_key"
         android:layout_width="140dp"
-        android:layout_height="270dp"
+        android:layout_height="260dp"
         android:layout_gravity="center"
         android:background="@drawable/og_ek_key">
 
@@ -15,6 +15,7 @@
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_gravity="center"
-            android:importantForAccessibility="no" />
+            android:importantForAccessibility="no"
+            android:tint="?android:attr/textColorPrimary" />
     </FrameLayout>
 </FrameLayout>

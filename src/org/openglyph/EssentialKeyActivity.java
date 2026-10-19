@@ -1,6 +1,5 @@
 package org.openglyph;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -16,6 +15,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.android.settingslib.collapsingtoolbar.CollapsingToolbarBaseActivity;
+
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.PagerSnapHelper;
@@ -28,7 +29,8 @@ import java.util.List;
  * dot) to the action; some actions have options or need an app. The device KeyHandler reads
  * the same Settings.Secure keys (see {@link EssentialKey}).
  */
-public final class EssentialKeyActivity extends Activity {
+public final class EssentialKeyActivity extends CollapsingToolbarBaseActivity {
+    private int mIconColor, mIconOnColor;
     private RecyclerView mCarousel;
     private LinearLayoutManager mLayout;
     private final PagerSnapHelper mSnap = new PagerSnapHelper();
@@ -37,10 +39,12 @@ public final class EssentialKeyActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.og_essential);
-        getWindow().setStatusBarColor(0xFF050505);
-        getWindow().setNavigationBarColor(0xFF050505);
-        findViewById(R.id.ek_back).setOnClickListener(v -> finish());
+        // Same frame as the other Glyph screens: SettingsLib's collapsing toolbar, theme colours.
+        setTitle(R.string.ek_title);
+        getLayoutInflater().inflate(R.layout.og_essential,
+                findViewById(com.android.settingslib.collapsingtoolbar.R.id.content_frame));
+        mIconColor = themeColor(android.R.attr.textColorPrimary);
+        mIconOnColor = themeColor(android.R.attr.textColorPrimaryInverse);
 
         mCarousel = findViewById(R.id.ek_carousel);
         mLayout = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
@@ -94,6 +98,13 @@ public final class EssentialKeyActivity extends Activity {
         select(current, false);
     }
 
+    private int themeColor(int attr) {
+        android.content.res.TypedArray a = obtainStyledAttributes(new int[] {attr});
+        int c = a.getColor(0, 0xFF888888);
+        a.recycle();
+        return c;
+    }
+
     /** Fades keys away from the centre: the middle one is the lit key, the rest just icons. */
     private void styleChildren() {
         int centre = mCarousel.getWidth() / 2;
@@ -105,6 +116,8 @@ public final class EssentialKeyActivity extends Activity {
             k.getBackground().setAlpha((int) (255 * key));
             ImageView icon = child.findViewById(R.id.ek_icon);
             icon.setAlpha(Math.max(0.28f, 1 - d * 0.75f));
+            // On the accent-coloured key the icon takes the inverse text colour, like a button.
+            icon.setColorFilter(key > 0.5f ? mIconOnColor : mIconColor);
             float scale = 1 - Math.min(0.35f, d * 0.35f);
             icon.setScaleX(scale);
             icon.setScaleY(scale);
@@ -183,7 +196,7 @@ public final class EssentialKeyActivity extends Activity {
         apps.sort((x, y) -> x.loadLabel(pm).toString().compareToIgnoreCase(y.loadLabel(pm).toString()));
         CharSequence[] labels = new CharSequence[apps.size()];
         for (int i = 0; i < apps.size(); i++) labels[i] = apps.get(i).loadLabel(pm);
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        new AlertDialog.Builder(this)
                 .setTitle(R.string.ek_choose_app)
                 .setItems(labels, (d, which) -> {
                     ResolveInfo ri = apps.get(which);

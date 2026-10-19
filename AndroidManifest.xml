@@ -76,8 +76,7 @@
         <activity
             android:name=".EssentialKeyActivity"
             android:exported="true"
-            android:label="@string/ek_title"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            android:label="@string/ek_title">
             <intent-filter>
                 <action android:name="org.openglyph.ESSENTIAL_KEY" />
                 <category android:name="android.intent.category.DEFAULT" />
