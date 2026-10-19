@@ -20,7 +20,7 @@ public final class Toys {
     /** The built-in toys in their default Glyph Button order; "off" is always last. */
     public static List<Toy> all() {
         return List.of(new Clock(), new Battery(), new SolarPath(), new Mirror(), new Bottle(),
-                new RockPaperScissors(), new Magic8(), new Stopwatch(), new Hourglass(), new Leveller(),
+                new RockPaperScissors(), new Magic8(), new Stopwatch(), new Leveller(),
                 new Compass(), new MoonPhase(), new FeedTheFly(), new Off());
     }
 
@@ -309,6 +309,52 @@ public final class Toys {
                 // Dim the picture so the digits read, then count down over it.
                 f.dim(3);
                 Countdown.draw(f, left, COUNTDOWN_MS);
+            } else if (shotAt != Long.MIN_VALUE && -left < IRIS_MS) {
+                iris(f, -left / (double) IRIS_MS);
+            }
+        }
+
+        /** The shutter: the lens's aperture blades close at 0 and open again. */
+        public static final long IRIS_MS = 650;
+
+        /** How far the aperture is closed (0 open .. 1 shut) at t (0..1 of the shutter). */
+        static double closed(double t) {
+            if (t < 0.4) return Art.smooth(0, 1, t / 0.4);
+            if (t < 0.55) return 1;
+            return 1 - Art.smooth(0, 1, (t - 0.55) / 0.45);
+        }
+
+        /**
+         * Six blades over the picture: a turning hexagonal opening that shrinks to nothing,
+         * the blades dim with bright edges and seams.
+         */
+        static void iris(Frame f, double t) {
+            double c = closed(t);
+            double radius = 14 * (1 - c), turn = c * 0.9;
+            final int ss = 4;
+            for (int y = 0; y < 25; y++) {
+                for (int x = 0; x < 25; x++) {
+                    if (!MatrixLayout.exists(x, y)) continue;
+                    double open = 0, blade = 0;
+                    for (int j = 0; j < ss; j++) {
+                        for (int i = 0; i < ss; i++) {
+                            double px = x + (i + 0.5) / ss - Art.MID, py = y + (j + 0.5) / ss - Art.MID;
+                            double r = Math.hypot(px, py), th = Math.atan2(py, px) - turn;
+                            double k = Math.PI / 3, sector = ((th % k) + k) % k;
+                            double apothem = radius * Math.cos(Math.PI / 6) / Math.cos(sector - Math.PI / 6);
+                            if (r < apothem) { open++; continue; }
+                            double edge = r - apothem < 0.9 ? 0.75 : 0;
+                            // Seams between blades: curves leaving each corner of the opening.
+                            double sa = th - (r - apothem) * 0.11;
+                            double toSeam = Math.abs(Math.IEEEremainder(sa, Math.PI / 3)) * r;
+                            double seam = toSeam < 0.55 ? 0.45 : 0;
+                            blade += Math.max(0.1, Math.max(edge, seam));
+                        }
+                    }
+                    int n = ss * ss;
+                    int picture = f.get(x, y);
+                    f.set(x, y, (int) Math.round(picture * open / n + ON * blade / n));
+                }
             }
         }
 
@@ -324,6 +370,9 @@ public final class Toys {
             return r;
         }
 
+        @Override public boolean keepsScreenOn(long now) {
+            return shotAt != Long.MIN_VALUE && now - shotAt < IRIS_MS;
+        }
         @Override public int sensors() { return SENSOR_CAMERA; }
         @Override public long timeoutMs() { return 60000; }
         @Override public long frameIntervalMs() { return 50; }
@@ -396,66 +445,35 @@ public final class Toys {
      * Hands: bright outline, dim fill (tools/generator/rps.html shows the animation).
      */
     public static final class RockPaperScissors implements Toy {
-        static final String[] ROCK = { // rows 7..19, full 25 columns
-            ".....################....",
-            ".....#++#+++#+++#+++#....",
-            ".....#++#+++#+++#+++#....",
-            ".....#++#+++#+++#+++#....",
-            ".....#++#+++#+++#+++#....",
-            ".....#+++++++++++++#.....",
-            ".....#++++++++++#++#.....",
-            ".....#+++++++++#+++#.....",
-            ".....##########++++#.....",
-            ".....#+++++++++++++#.....",
-            ".....#+++++++++++++#.....",
-            "......#+++++++++++#......",
-            ".......###########.......",
+        // The hands, built from parts (back to front) so they come out smooth: wrist, palm,
+        // fingers and thumb, each with its own outline.
+        static final Art.Part[] ROCK = {
+            Art.box(12.5, 19.6, 4.0, 2.2, 1.0),                 // wrist
+            Art.box(12.5, 14.4, 6.6, 5.0, 2.6),                 // back of the fist
+            Art.box(8.3, 9.6, 1.45, 2.6, 1.3), Art.box(11.1, 9.4, 1.45, 2.7, 1.3),
+            Art.box(13.9, 9.4, 1.45, 2.7, 1.3), Art.box(16.7, 9.8, 1.45, 2.4, 1.3), // knuckles
+            Art.box(8.3, 13.0, 1.45, 1.5, 1.2), Art.box(11.1, 13.0, 1.45, 1.5, 1.2),
+            Art.box(13.9, 13.0, 1.45, 1.5, 1.2), Art.box(16.7, 13.0, 1.45, 1.5, 1.2), // curled tips
+            Art.capsule(6.6, 16.4, 14.2, 15.8, 1.5),           // thumb across
         };
-        static final int ROCK_TOP = 7;
-        static final String[] PAPER = { // rows 3..20, full 25 columns
-            ".............##..........",
-            "..........##.##..........",
-            "..........##.##.##.......",
-            ".......##.##.##.##.......",
-            ".......##.##.##.##.......",
-            ".......##.##.##.##.......",
-            "...##..##.##.##.##.......",
-            "....##.##.##.##.##.......",
-            ".....####.##.##.##.......",
-            "......#############......",
-            ".......##++++++++#.......",
-            "......#+++++++++++#......",
-            "......#+++++++++++#......",
-            "......#+++++++++++#......",
-            "......#+++++++++++#......",
-            "......#+++++++++++#......",
-            ".......#+++++++++#.......",
-            "........#########........",
+        static final Art.Part[] PAPER = {
+            Art.box(12.8, 21.4, 3.8, 2.2, 1.0),                 // wrist
+            Art.capsule(8.2, 16.6, 4.3, 11.0, 1.35),           // thumb
+            Art.capsule(9.0, 11.5, 8.3, 4.9, 1.3),             // index
+            Art.capsule(11.8, 11.0, 11.6, 3.0, 1.3),           // middle
+            Art.capsule(14.6, 11.0, 14.9, 4.0, 1.3),           // ring
+            Art.capsule(17.0, 12.0, 17.8, 6.9, 1.15),          // little
+            Art.box(12.7, 15.4, 5.5, 4.6, 2.4),                 // palm
         };
-        static final int PAPER_TOP = 3;
-        static final String[] SCISSORS = { // rows 3..20, full 25 columns
-            "......#...........#......",
-            ".....#+#.........#+#.....",
-            ".....#+#.........#+#.....",
-            "......#+#.......#+#......",
-            "......#+#.......#+#......",
-            ".......#+#.....#+#.......",
-            ".......#+#.....#+#.......",
-            ".......#+#..#..#+#.......",
-            "........#+#.#.#+#........",
-            "........#+#.#.#+#........",
-            ".........#+###+#.........",
-            ".........#++++++#........",
-            "........#++++++++#.......",
-            "........#######++#.......",
-            "........#++++++++#.......",
-            "........#++++++++#.......",
-            ".........#++++++#........",
-            "..........######.........",
+        static final Art.Part[] SCISSORS = {
+            Art.box(13.0, 21.4, 3.8, 2.2, 1.0),                 // wrist
+            Art.capsule(10.8, 12.5, 6.6, 3.4, 1.3),            // index
+            Art.capsule(13.8, 12.5, 18.0, 3.6, 1.3),           // middle
+            Art.box(13.0, 15.8, 5.2, 4.4, 2.4),                 // palm
+            Art.box(14.8, 12.6, 1.4, 1.6, 1.2), Art.box(17.3, 13.4, 1.3, 1.5, 1.1), // curled
+            Art.capsule(8.4, 16.6, 14.6, 15.0, 1.4),           // thumb over them
         };
-        static final int SCISSORS_TOP = 3;
-        static final String[][] HANDS = {ROCK, PAPER, SCISSORS};
-        static final int[] TOPS = {ROCK_TOP, PAPER_TOP, SCISSORS_TOP};
+        static final Art.Part[][] HANDS = {ROCK, PAPER, SCISSORS};
         static final long BOB_MS = 330, SHAKE_MS = BOB_MS * 3, REVEAL_MS = 260, SHOW_MS = 4000;
         static final long IDLE_MS = 900;
         static final int FILL = ON * 2 / 7;
@@ -483,14 +501,7 @@ public final class Toys {
 
         /** Stamps hand {@code i} shifted by dy, at {@code scale} of full brightness. */
         public static void hand(Frame f, int i, int dy, double scale) {
-            String[] rows = HANDS[i];
-            for (int r = 0; r < rows.length; r++) {
-                for (int x = 0; x < rows[r].length(); x++) {
-                    char c = rows[r].charAt(x);
-                    if (c == '.') continue;
-                    f.max(x, TOPS[i] + r + dy, (int) ((c == '#' ? ON : FILL) * scale));
-                }
-            }
+            Art.figure(f, HANDS[i], dy, 0.3, (int) (ON * scale));
         }
 
         @Override public void render(Frame f, long now, Toy.Context ctx) {

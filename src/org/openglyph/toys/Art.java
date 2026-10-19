@@ -142,4 +142,44 @@ final class Art {
             return bottle(u, v);
         }, 4, value);
     }
+
+    // ---------------- figures from parts ----------------
+
+    /** Signed distance to a shape: negative inside. */
+    interface Part {
+        double sdf(double x, double y);
+    }
+
+    /** A rounded rectangle centred at (cx, cy) with half sizes hx, hy and corner radius r. */
+    static Part box(double cx, double cy, double hx, double hy, double r) {
+        return (x, y) -> {
+            double qx = Math.abs(x - cx) - (hx - r), qy = Math.abs(y - cy) - (hy - r);
+            double ox = Math.max(qx, 0), oy = Math.max(qy, 0);
+            return Math.hypot(ox, oy) + Math.min(Math.max(qx, qy), 0) - r;
+        };
+    }
+
+    /** A capsule (a thick line with round ends) from (ax, ay) to (bx, by), radius r. */
+    static Part capsule(double ax, double ay, double bx, double by, double r) {
+        return (x, y) -> {
+            double px = x - ax, py = y - ay, vx = bx - ax, vy = by - ay;
+            double t = clamp((px * vx + py * vy) / (vx * vx + vy * vy));
+            return Math.hypot(px - vx * t, py - vy * t) - r;
+        };
+    }
+
+    /**
+     * Parts drawn back to front: each pixel takes the front-most part over it, bright on that
+     * part's edge and dim inside, so overlapping parts (fingers on a palm) keep their seams.
+     */
+    static void figure(Frame f, Part[] backToFront, double dy, double fill, int value) {
+        paint(f, (x, y) -> {
+            double yy = y - dy;
+            for (int i = backToFront.length - 1; i >= 0; i--) {
+                double d = backToFront[i].sdf(x, yy);
+                if (d < 0) return d > -0.9 ? 1 : fill;
+            }
+            return 0;
+        }, 4, value);
+    }
 }

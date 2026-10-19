@@ -85,6 +85,7 @@ public final class ToySim {
         Frame f = new Frame();
         prepare(phone, now);
         if (phone.isActive(now)) phone.render(f, now);
+        else if (Hourglass.effect().isActive(now)) Hourglass.effect().render(f, now); // a timer runs
         copy(f, out, 0);
         for (int i = 0; i < toys.size(); i++) {
             f.clear();

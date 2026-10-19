@@ -321,8 +321,8 @@ public final class HostTests {
         java.util.List<String> ids = new ArrayList<>();
         for (org.openglyph.toys.Toy t : all) ids.add(t.id());
         check(ids.equals(java.util.List.of("clock", "battery", "solar", "mirror", "bottle", "rps",
-                "magic8", "stopwatch", "hourglass", "leveller", "compass", "moon", "fly", "off")),
-                "the stock Phone (3) toy set (Nothing OS 4: + Hourglass), Off last: " + ids);
+                "magic8", "stopwatch", "leveller", "compass", "moon", "fly", "off")),
+                "the stock Phone (3) toy set (the hourglass shows by itself with a timer), Off last: " + ids);
         org.openglyph.toys.Toy.Context ctx = new org.openglyph.toys.Toy.Context();
         ctx.hour = 21; ctx.minute = 58; ctx.batteryPercent = 64;
         ctx.epochMs = 1760781600000L; // 2025-10-18 10:00 UTC

@@ -69,11 +69,6 @@ public final class ToyReel {
                 (t, c, toy, p) -> { c.hasGravity = true; c.gz = 9.8f; clockAt(c, EPOCH0 + t); }));
         r.add(new Reel("stopwatch", "Kronometre", "Uzun basış: başlat / durdur / sıfırla", 9000,
                 new Presses().at(500, 7000, 8500), (t, c, toy, p) -> clockAt(c, EPOCH0 + t)));
-        r.add(new Reel("hourglass", "Kum saati", "Saat uygulamasındaki zamanlayıcı", 9000, new Presses(),
-                (t, c, toy, p) -> {
-                    clockAt(c, EPOCH0 + t);
-                    if (t == 0) Hourglass.timerRunning(EPOCH0 + 8000, EPOCH0);
-                }));
         r.add(new Reel("leveller", "Su terazisi", "Eğim", 6000, new Presses(),
                 (t, c, toy, p) -> {
                     double a = t / 900.0, k = t > 4500 ? 0 : 3.5 * (1 - t / 4500.0);

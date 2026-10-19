@@ -612,8 +612,8 @@ public final class GlyphService extends Service {
                 if (mToys.selected() instanceof Toys.Mirror m && m.takeCaptureRequest()) {
                     // The toy counts down 3-2-1 on the matrix; the photo is taken at 0.
                     mHandler.removeCallbacks(mMirrorShot);
-                    // A frame after 0, so the matrix picture saved with it is the camera, not the "1".
-                    mHandler.postDelayed(mMirrorShot, Toys.Mirror.COUNTDOWN_MS + 80);
+                    // The shot goes as the blades close (Toys.Mirror.iris).
+                    mHandler.postDelayed(mMirrorShot, Toys.Mirror.COUNTDOWN_MS + 120);
                 }
             } else if ("down".equals(event) && toys) {
                 mToys.onButtonDown(now);
@@ -641,10 +641,9 @@ public final class GlyphService extends Service {
 
     private final Runnable mSensorCheck = this::updateToySensors;
     private final Runnable mMirrorShot = () -> {
-        // The matrix at the shutter: the countdown is over, so it shows the camera picture.
-        int[] glyph = new int[org.openglyph.core.MatrixLayout.GRID_SIZE];
-        mRenderer.snapshot(glyph);
-        mMirror.capture(glyph);
+        // The picture the mirror shows (the matrix is busy with the shutter blades by now).
+        int[] grid = mMirror.grid();
+        mMirror.capture(grid == null ? null : grid.clone());
     };
 
     private final class CallState extends TelephonyCallback
