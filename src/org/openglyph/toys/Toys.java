@@ -501,7 +501,8 @@ public final class Toys {
 
         /** Stamps hand {@code i} shifted by dy, at {@code scale} of full brightness. */
         public static void hand(Frame f, int i, int dy, double scale) {
-            Art.figure(f, HANDS[i], dy, 0.3, (int) (ON * scale));
+            // Drawn turned right: the hand reaches in from the left, fingers to the right.
+            Art.figure(f, HANDS[i], dy, 0.3, (int) (ON * scale), true);
         }
 
         @Override public void render(Frame f, long now, Toy.Context ctx) {

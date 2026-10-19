@@ -173,10 +173,17 @@ final class Art {
      * part's edge and dim inside, so overlapping parts (fingers on a palm) keep their seams.
      */
     static void figure(Frame f, Part[] backToFront, double dy, double fill, int value) {
+        figure(f, backToFront, dy, fill, value, false);
+    }
+
+    /** As above; {@code turnRight}: the figure turned 90 degrees clockwise (dy along its own axis). */
+    static void figure(Frame f, Part[] backToFront, double dy, double fill, int value,
+            boolean turnRight) {
         paint(f, (x, y) -> {
-            double yy = y - dy;
+            double fx = turnRight ? y : x, fy = turnRight ? 2 * MID - x : y;
+            double yy = fy - dy;
             for (int i = backToFront.length - 1; i >= 0; i--) {
-                double d = backToFront[i].sdf(x, yy);
+                double d = backToFront[i].sdf(fx, yy);
                 if (d < 0) return d > -0.9 ? 1 : fill;
             }
             return 0;
