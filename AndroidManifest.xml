@@ -83,6 +83,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- Per-caller generative ringtones for Telecom (see RingtoneProvider). -->
+        <provider
+            android:name=".RingtoneProvider"
+            android:authorities="org.openglyph.ringtone"
+            android:directBootAware="true"
+            android:exported="true" />
         <!-- The camera app's "Recording light" switch (see RecordLightProvider). -->
         <provider
             android:name=".RecordLightProvider"

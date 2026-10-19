@@ -88,6 +88,52 @@ final class GenerativeSounds {
                 k -> Generative.theme(seed, pkg, engine));
     }
 
+    /**
+     * The theme of a caller: this phone's seed + "call:" + a hash of the caller's number (the
+     * number itself never reaches us, see RingtoneProvider).
+     */
+    synchronized Generative.Theme callerTheme(String callerKey) {
+        Generative.Engine engine = engine();
+        String seed = deviceSeed(mContext.getContentResolver());
+        return mThemes.computeIfAbsent(seed + ":" + engine + ":call:" + callerKey,
+                k -> Generative.theme(seed, "call:" + callerKey, engine));
+    }
+
+    /** One ring of a caller's ringtone: the melody, then a pause; the ringer loops it. */
+    static long ringPeriodMs(Generative.Theme theme) {
+        return Math.max(theme.durationMs() + RING_PAUSE_MS, MIN_RING_PERIOD_MS);
+    }
+
+    private static final long RING_PAUSE_MS = 700;
+    private static final long MIN_RING_PERIOD_MS = 2200;
+
+    /**
+     * The caller's ringtone as a WAV in our cache (made on first use, per seed and engine):
+     * the theme's melody padded with silence to one ring period, for the ringer to loop.
+     */
+    synchronized java.io.File ringtoneFile(String callerKey) throws java.io.IOException {
+        Generative.Theme theme = callerTheme(callerKey);
+        java.io.File dir = new java.io.File(mContext.getCacheDir(), "ringtones");
+        String stamp = Integer.toHexString((VERSION + ":" + deviceSeed(mContext.getContentResolver())
+                + ":" + engine()).hashCode());
+        java.io.File file = new java.io.File(dir, stamp + "-" + callerKey + ".wav");
+        if (file.isFile()) return file;
+        java.io.File[] old = dir.listFiles();
+        if (old != null) {
+            for (java.io.File f : old) if (!f.getName().startsWith(stamp + "-")) f.delete();
+        }
+        dir.mkdirs();
+        short[] melody = theme.synth();
+        int total = (int) (ringPeriodMs(theme) * SAMPLE_RATE / 1000);
+        short[] ring = java.util.Arrays.copyOf(melody, Math.max(total, melody.length));
+        java.io.File tmp = new java.io.File(dir, file.getName() + ".tmp");
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
+            out.write(Generative.wav(ring, SAMPLE_RATE));
+        }
+        if (!tmp.renameTo(file)) throw new java.io.IOException("cannot save " + file);
+        return file;
+    }
+
     /** Plays an app's sound now (Settings preview). */
     void play(String pkg) {
         short[] pcm = theme(pkg).synth();

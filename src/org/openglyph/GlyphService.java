@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.openglyph.core.Generative;
 import org.openglyph.core.MatrixLayout;
 import org.openglyph.core.Renderer;
 import org.openglyph.core.SysfsMatrixSink;
@@ -87,6 +88,17 @@ public final class GlyphService extends Service {
     private volatile boolean mBedtime;
     /** Package and rule of the Essential Notification on the matrix, to skip redundant redraws. */
     private String mEssentialShown = "";
+
+    GenerativeSounds sounds() {
+        return mSounds;
+    }
+
+    /** RingtoneProvider: this caller's ringtone is about to play; loop their animation. */
+    void onCallerRingtone(String callerKey) {
+        Generative.Theme theme = mSounds.callerTheme(callerKey);
+        mCall.setTheme(theme, GenerativeSounds.ringPeriodMs(theme), SystemClock.uptimeMillis());
+        mRenderer.invalidate();
+    }
 
     static GlyphService get() {
         return sInstance;

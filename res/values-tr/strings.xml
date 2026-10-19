@@ -158,6 +158,8 @@
     <string name="pattern_generative">Üretken</string>
     <string name="settings_generative_category">Üretken</string>
     <string name="settings_generative_sounds">Üretken bildirim sesleri</string>
+    <string name="settings_generative_ringtone">Üretken zil sesleri</string>
+    <string name="settings_generative_ringtone_summary">Arayan her kişi, bu telefonun seed\'i ve numarasından üretilen, döngüyle çalan kendi sesi ve Glyph animasyonuyla çalar. Kendi zil sesi olan kişiler onu korur</string>
     <string name="settings_generative_sounds_summary">Her uygulama, bu telefonun seed\'i ve uygulamadan üretilen kendi sesini alır. Yalnızca varsayılan seste olan kanallar değişir; kapatınca geri alınır</string>
     <string name="settings_generative_preview">Bir uygulamayı önizle</string>
     <string name="settings_generative_preview_summary">Uygulamanın sesini ve animasyonunu çalar</string>

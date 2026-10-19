@@ -40,13 +40,15 @@ final class GlyphSettings {
     static final String TOY_ORDER = "open_glyph_toy_order_v2";
     static final String MUSIC = "open_glyph_music";                  // 1/0, default 0
     static final String GEN_SOUNDS = "open_glyph_generative_sounds"; // 1/0, default 0
+    /** Read by Telecom (RingtoneFactory) too: each caller rings with their own generative sound. */
+    static final String GEN_RINGTONE = "open_glyph_generative_ringtone"; // 1/0, default 0
     static final String SEED = "open_glyph_seed";                    // text, random per device
     static final String ENGINE = "open_glyph_engine";                // DIODE|CHEMICAL
 
     static final String[] ALL = {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
-        AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, ENGINE, SEED,
+        AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, GEN_RINGTONE, ENGINE, SEED,
     };
 
     private GlyphSettings() {}

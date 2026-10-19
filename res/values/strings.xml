@@ -168,6 +168,8 @@
     <string name="pattern_generative">Generative</string>
     <string name="settings_generative_category">Generative</string>
     <string name="settings_generative_sounds">Generative notification sounds</string>
+    <string name="settings_generative_ringtone">Generative ringtones</string>
+    <string name="settings_generative_ringtone_summary">Each caller rings with their own looping sound and Glyph animation, made from this phone\'s seed and their number. Contacts with a ringtone of their own keep it</string>
     <string name="settings_generative_sounds_summary">Each app gets its own sound, made from this phone\'s seed and the app. Only channels on the default sound are changed; switching off restores them</string>
     <string name="settings_generative_preview">Preview an app</string>
     <string name="settings_generative_preview_summary">Plays the app\'s sound and animation</string>

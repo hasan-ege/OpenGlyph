@@ -158,14 +158,28 @@ public final class Effects {
         }
     }
 
-    /** Rings moving outward for as long as the phone rings. */
+    /**
+     * For as long as the phone rings: the caller's generative animation, looped in step with
+     * their ringtone (one melody per ring period), or rings moving outward without one.
+     */
     public static final class IncomingCall implements Effect {
         private volatile boolean ringing;
         private volatile long startMs;
+        private volatile Generative.Theme theme;
+        private volatile long periodMs;
+        private volatile long themeStartMs;
 
         public void setRinging(boolean ringing, long nowMs) {
             if (ringing && !this.ringing) startMs = nowMs;
+            if (!ringing) theme = null;
             this.ringing = ringing;
+        }
+
+        /** The caller's theme, from the moment their ringtone starts; it loops every period. */
+        public void setTheme(Generative.Theme theme, long periodMs, long nowMs) {
+            this.periodMs = Math.max(1, periodMs);
+            this.themeStartMs = nowMs;
+            this.theme = theme;
         }
 
         @Override public int priority() { return PRIORITY_CALL; }
@@ -175,6 +189,12 @@ public final class Effects {
         }
 
         @Override public long render(Frame f, long now) {
+            Generative.Theme th = theme;
+            if (th != null) {
+                long t = Math.max(0, now - themeStartMs) % periodMs;
+                if (t < th.durationMs()) th.render(f, t);
+                return 33;
+            }
             double phase = ((now - startMs) % 1200) / 1200.0;
             for (int y = 0; y < MatrixLayout.HEIGHT; y++) {
                 for (int x = 0; x < MatrixLayout.WIDTH; x++) {

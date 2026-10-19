@@ -49,6 +49,13 @@ public final class NotificationsFragment extends GlyphFragment {
             return true;
         });
 
+        androidx.preference.TwoStatePreference ringtone = findPreference(GlyphSettings.GEN_RINGTONE);
+        ringtone.setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.GEN_RINGTONE));
+        ringtone.setOnPreferenceChangeListener((p, value) -> {
+            GlyphSettings.setFlag(cr, GlyphSettings.GEN_RINGTONE, (Boolean) value);
+            return true;
+        });
+
         ListPreference preview = findPreference("generative_preview");
         java.util.List<AppList.App> apps = AppList.launchable(requireContext());
         CharSequence[] labels = new CharSequence[apps.size()];

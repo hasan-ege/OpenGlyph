@@ -31,6 +31,12 @@
             android:summary="@string/settings_generative_sounds_summary"
             android:persistent="false" />
 
+        <SwitchPreferenceCompat
+            android:key="open_glyph_generative_ringtone"
+            android:title="@string/settings_generative_ringtone"
+            android:summary="@string/settings_generative_ringtone_summary"
+            android:persistent="false" />
+
         <ListPreference
             android:key="generative_preview"
             android:title="@string/settings_generative_preview"
