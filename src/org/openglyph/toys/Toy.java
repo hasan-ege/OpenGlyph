@@ -56,9 +56,12 @@ public interface Toy {
         return false;
     }
 
-    /** How long the toy stays on screen after the last Glyph Button press. */
+    /**
+     * How long the toy stays on screen after the last Glyph Button press; 0 (the default) uses
+     * the user's Glyph Toys timeout, which is what every stock toy does.
+     */
     default long timeoutMs() {
-        return ToyHost.IDLE_MS;
+        return 0;
     }
 
     /** Milliseconds until the picture changes on its own (-1: only on new data). */

@@ -12,7 +12,8 @@ import org.openglyph.core.MatrixLayout;
 
 /**
  * The Glyph Matrix on screen. Shows a fixed grid, a drawable (SDK toy previews), or an
- * animated {@link Source} that is polled while the view is attached.
+ * animated {@link Source} that is polled while the view is attached and its window visible
+ * (a stopped Settings screen keeps its views attached), redrawing only when the picture changed.
  */
 public final class MatrixView extends View {
     /** Fills {@code grid}; returns ms until the next frame, or -1 for a still picture. */
@@ -21,6 +22,7 @@ public final class MatrixView extends View {
     }
 
     private final int[] mGrid = new int[MatrixLayout.GRID_SIZE];
+    private final int[] mNext = new int[MatrixLayout.GRID_SIZE];
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Rect mBounds = new Rect();
     private Source mSource;
@@ -47,7 +49,11 @@ public final class MatrixView extends View {
         mSource = source;
         mDrawable = null;
         removeCallbacks(mTick);
-        if (isAttachedToWindow()) mTick.run();
+        if (polling()) mTick.run();
+    }
+
+    private boolean polling() {
+        return isAttachedToWindow() && getWindowVisibility() == VISIBLE;
     }
 
     void setDrawable(Drawable d) {
@@ -61,15 +67,24 @@ public final class MatrixView extends View {
         @Override public void run() {
             Source s = mSource;
             if (s == null) return;
-            long next = s.frame(mGrid);
-            invalidate();
-            if (next >= 0) postDelayed(this, Math.max(33, next));
+            long next = s.frame(mNext);
+            if (!java.util.Arrays.equals(mNext, mGrid)) {
+                System.arraycopy(mNext, 0, mGrid, 0, mGrid.length);
+                invalidate();
+            }
+            if (next >= 0 && polling()) postDelayed(this, Math.max(33, next));
         }
     };
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (mSource != null) mTick.run();
+    }
+
+    @Override protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        removeCallbacks(mTick);
+        if (mSource != null && polling()) mTick.run();
     }
 
     @Override protected void onDetachedFromWindow() {

@@ -27,7 +27,8 @@ import org.openglyph.toys.IdleLayer;
  *
  * - Watches screen on/off and the charger, and (only while a feature needs it) the
  *   accelerometer for "face down".
- * - Decides with {@link AodPolicy} whether the dim clock in {@link IdleLayer} is shown, and
+ * - Decides with {@link AodPolicy} whether the dim clock in {@link IdleLayer} is shown (not while
+ *   the battery is low, as on the stock phone), and
  *   wakes once a minute while it is, so the clock stays right through deep sleep.
  * - Flip to Glyph: face down silences the ringer (saving the old mode), face up restores it.
  *   Notifications keep lighting the matrix, which is the point.
@@ -54,6 +55,8 @@ final class IdleController implements SensorEventListener {
 
     private boolean mScreenOff;
     private boolean mCharging;
+    /** Battery low: always-on stays off until it recovers (as on the stock phone). */
+    private boolean mBatteryLow;
     private boolean mFaceDown;
     private boolean mSensorOn;
     private boolean mAlarmSet;
@@ -81,11 +84,15 @@ final class IdleController implements SensorEventListener {
         PowerManager pm = mContext.getSystemService(PowerManager.class);
         mScreenOff = !pm.isInteractive();
         mCharging = mContext.getSystemService(BatteryManager.class).isCharging();
+        Intent battery = mContext.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        mBatteryLow = battery != null && battery.getBooleanExtra(BatteryManager.EXTRA_BATTERY_LOW, false);
         IntentFilter f = new IntentFilter();
         f.addAction(Intent.ACTION_SCREEN_ON);
         f.addAction(Intent.ACTION_SCREEN_OFF);
         f.addAction(Intent.ACTION_POWER_CONNECTED);
         f.addAction(Intent.ACTION_POWER_DISCONNECTED);
+        f.addAction(Intent.ACTION_BATTERY_LOW);
+        f.addAction(Intent.ACTION_BATTERY_OKAY);
         f.addAction(Intent.ACTION_TIME_CHANGED);
         f.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         mContext.registerReceiver(mReceiver, f, null, mHandler);
@@ -123,7 +130,8 @@ final class IdleController implements SensorEventListener {
         if (schedule) scheduleBedtimeAlarm(Bedtime.minutesToNextChange(start, end, minute));
         mBedtimeListener.onBedtime(bedtime);
 
-        boolean show = AodPolicy.shouldShow(mode, mScreenOff, mFaceDown, mCharging, bedtime);
+        boolean show = AodPolicy.shouldShow(mode, mScreenOff, mFaceDown, mCharging, bedtime,
+                mBatteryLow);
         mIdle.setAlwaysOn(show);
         if (show) scheduleMinuteAlarm(); else cancelMinuteAlarm();
         mAodListener.onAod(show);
@@ -237,6 +245,14 @@ final class IdleController implements SensorEventListener {
                 case Intent.ACTION_SCREEN_OFF -> mScreenOff = true;
                 case Intent.ACTION_POWER_CONNECTED -> mCharging = true;
                 case Intent.ACTION_POWER_DISCONNECTED -> mCharging = false;
+                case Intent.ACTION_BATTERY_LOW -> {
+                    mBatteryLow = true;
+                    Log.i(GlyphService.TAG, "battery low: always-on off");
+                }
+                case Intent.ACTION_BATTERY_OKAY -> {
+                    mBatteryLow = false;
+                    Log.i(GlyphService.TAG, "battery recovered: always-on back");
+                }
                 case Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> {
                     cancelMinuteAlarm(); // re-armed for the new wall-clock minute below
                 }

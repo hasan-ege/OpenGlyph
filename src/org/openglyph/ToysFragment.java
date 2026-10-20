@@ -40,6 +40,7 @@ public final class ToysFragment extends Fragment {
         mCarousel.setAdapter(mAdapter);
         v.findViewById(R.id.toy_manage).setOnClickListener(b ->
                 GlyphFragment.open(this, new ManageToysFragment()));
+        v.findViewById(R.id.toy_timeout).setOnClickListener(b -> pickTimeout());
         v.findViewById(R.id.toy_try).setOnClickListener(b -> {
             GlyphService service = GlyphService.get();
             if (service != null && mPicked < mActive.size()) service.showToy(mActive.get(mPicked).id);
@@ -63,6 +64,35 @@ public final class ToysFragment extends Fragment {
         root.findViewById(R.id.toy_try).setEnabled(!mActive.isEmpty());
         mAdapter.notifyDataSetChanged();
         pick(mPicked);
+        showTimeout();
+    }
+
+    private int timeoutIndex() {
+        long ms = GlyphSettings.toyTimeoutMs(requireContext().getContentResolver());
+        long[] choices = org.openglyph.toys.ToyHost.TIMEOUTS_MS;
+        for (int i = 0; i < choices.length; i++) if (choices[i] == ms) return i;
+        return 0;
+    }
+
+    private void showTimeout() {
+        String[] labels = getResources().getStringArray(R.array.toy_timeout_entries);
+        ((TextView) requireView().findViewById(R.id.toy_timeout_value))
+                .setText(labels[timeoutIndex()]);
+    }
+
+    /** Glyph Toys timeout: the stock choices, 15 seconds to 30 minutes. */
+    private void pickTimeout() {
+        new android.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.toys_timeout)
+                .setSingleChoiceItems(R.array.toy_timeout_entries, timeoutIndex(), (d, which) -> {
+                    android.provider.Settings.Secure.putLong(
+                            requireContext().getContentResolver(), GlyphSettings.TOY_TIMEOUT,
+                            org.openglyph.toys.ToyHost.TIMEOUTS_MS[which]);
+                    showTimeout();
+                    d.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void pick(int position) {

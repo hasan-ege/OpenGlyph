@@ -6,4 +6,14 @@
     <string-array name="day_short_names">
         <item>Pzt</item><item>Sal</item><item>Çar</item><item>Per</item><item>Cum</item><item>Cmt</item><item>Paz</item>
     </string-array>
+    <!-- Glyph Toys timeout, in the order of ToyHost.TIMEOUTS_MS -->
+    <string-array name="toy_timeout_entries">
+        <item>15 saniye</item>
+        <item>30 saniye</item>
+        <item>1 dakika</item>
+        <item>2 dakika</item>
+        <item>5 dakika</item>
+        <item>10 dakika</item>
+        <item>30 dakika</item>
+    </string-array>
 </resources>

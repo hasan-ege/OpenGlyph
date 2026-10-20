@@ -45,6 +45,8 @@
     <string name="toys_manage">Manage toys</string>
     <string name="toys_manage_title">Manage Glyph Toys</string>
     <string name="toys_hint">Press the Glyph Button to cycle through active toys. Long press to interact.</string>
+    <string name="toys_timeout">Glyph Toys timeout</string>
+    <string name="toys_timeout_summary">Besides the timeout, Glyph Toys turn off when the phone is unlocked or the matrix is laid face down. A short press on the Glyph Button always brings them back.</string>
     <string name="toys_none_active">No active toys. Add some in Manage toys.</string>
     <string name="toys_active">Active toys</string>
     <string name="toys_more">More toys</string>
@@ -60,6 +62,7 @@
     <string name="aod_charging">While charging</string>
     <string name="settings_aod_choose">Toy</string>
     <string name="settings_aod_summary">%1$s · %2$s</string>
+    <string name="settings_aod_added">%1$s was added to the active Glyph Toys.</string>
     <string name="settings_aod_footer">The toy is shown dimmed while the screen is off. Toys made with the Glyph Matrix SDK appear here when they support always-on. Bedtime turns it off.</string>
 
     <!-- Notifications -->

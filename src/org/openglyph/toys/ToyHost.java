@@ -14,11 +14,16 @@ import org.openglyph.core.Frame;
  *   shows the next enabled toy. Long press goes to the selected toy ("change").
  * - A toy is selected (an SDK toy bound) only while it is on screen; when it goes off screen it
  *   is deselected, so the next press starts it afresh. It is
- *   shown for its {@link Toy#timeoutMs()} after the last press (default {@link #IDLE_MS}), or for
- *   as long as it keeps the screen on.
+ *   shown for the Glyph Toys timeout after the last press (as the stock host: one user setting
+ *   for every toy, 15 s to 30 min), or for as long as it keeps the screen on.
+ * - As the stock host, toys also go off on unlock and when the matrix is laid face down
+ *   ({@link #hide()}); a short press always brings them back.
  */
 public final class ToyHost implements Effect {
-    public static final long IDLE_MS = 5000;
+    /** Default Glyph Toys timeout (the shortest of the stock choices). */
+    public static final long IDLE_MS = 15000;
+    /** The stock "Glyph Toys timeout" choices. */
+    public static final long[] TIMEOUTS_MS = {15000, 30000, 60000, 120000, 300000, 600000, 1800000};
 
     private final List<Toy> all = new ArrayList<>();
     private final List<Toy> enabled = new ArrayList<>();
@@ -26,11 +31,26 @@ public final class ToyHost implements Effect {
     private int index;
     private Toy selected;
     private long visibleUntil = Long.MIN_VALUE;
+    private long timeoutMs = IDLE_MS;
 
     public ToyHost(Supplier<Toy.Context> context, Toy... toys) {
         this.context = context;
         for (Toy t : toys) all.add(t);
         enabled.addAll(all);
+    }
+
+    /** Settings > Glyph Toys timeout; applies from the next press. */
+    public synchronized void setTimeoutMs(long ms) {
+        timeoutMs = ms > 0 ? ms : IDLE_MS;
+    }
+
+    public synchronized long timeoutMs() {
+        return timeoutMs;
+    }
+
+    private long timeoutOf(Toy t) {
+        long own = t.timeoutMs();
+        return own > 0 ? own : timeoutMs;
     }
 
     public synchronized List<Toy> allToys() {
@@ -77,7 +97,7 @@ public final class ToyHost implements Effect {
         int i = enabled.indexOf(t);
         if (i >= 0) index = i;
         select(t);
-        visibleUntil = now + selected.timeoutMs();
+        visibleUntil = now + timeoutOf(selected);
     }
 
     /** Keeps the position on the same toy where possible; drops a selection that went away. */
@@ -98,7 +118,7 @@ public final class ToyHost implements Effect {
         if (enabled.isEmpty()) return;
         if (selected != null && isVisible(now)) index = (index + 1) % enabled.size();
         select(current());
-        visibleUntil = now + selected.timeoutMs();
+        visibleUntil = now + timeoutOf(selected);
     }
 
     public synchronized void onLongPress(long now) {
@@ -108,7 +128,7 @@ public final class ToyHost implements Effect {
             return;
         }
         selected.onLongPress(now);
-        visibleUntil = now + selected.timeoutMs();
+        visibleUntil = now + timeoutOf(selected);
     }
 
     public synchronized void onButtonDown(long now) {
@@ -141,6 +161,11 @@ public final class ToyHost implements Effect {
     private boolean isVisible(long now) {
         if (selected == null) return false;
         return (visibleUntil != Long.MIN_VALUE && now < visibleUntil) || selected.keepsScreenOn(now);
+    }
+
+    /** A toy is on the matrix now. */
+    public synchronized boolean isShowing(long now) {
+        return isVisible(now);
     }
 
     /** Toy.SENSOR_* flags the toy on screen needs now; 0 when nothing is shown. */

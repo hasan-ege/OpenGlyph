@@ -375,7 +375,6 @@ public final class Toys {
             return shotAt != Long.MIN_VALUE && now - shotAt < IRIS_MS;
         }
         @Override public int sensors() { return SENSOR_CAMERA; }
-        @Override public long timeoutMs() { return 60000; }
         @Override public long frameIntervalMs() { return 50; }
     }
 
@@ -689,7 +688,6 @@ public final class Toys {
         }
 
         @Override public int sensors() { return SENSOR_GRAVITY; }
-        @Override public long timeoutMs() { return 60000; }
         @Override public long frameIntervalMs() { return 33; }
     }
 
@@ -730,7 +728,6 @@ public final class Toys {
         }
 
         @Override public int sensors() { return SENSOR_HEADING; }
-        @Override public long timeoutMs() { return 60000; }
         @Override public long frameIntervalMs() { return 50; }
     }
 

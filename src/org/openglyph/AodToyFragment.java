@@ -82,6 +82,14 @@ public final class AodToyFragment extends GlyphFragment {
             p.setChecked(value.equals(current));
             p.setOnClickListener(clicked -> {
                 Settings.Secure.putString(cr, GlyphSettings.AOD_TOY, value);
+                // As the stock settings: the always-on toy joins the active toys too.
+                List<String> active = GlyphSettings.activeToys(cr);
+                if (!active.contains(e.id)) {
+                    active.add(e.id);
+                    GlyphSettings.setActiveToys(cr, active);
+                    android.widget.Toast.makeText(c, getString(R.string.settings_aod_added,
+                            e.label), android.widget.Toast.LENGTH_SHORT).show();
+                }
                 for (SelectorWithWidgetPreference o : mChoices) o.setChecked(o == clicked);
             });
             mChoices.add(p);

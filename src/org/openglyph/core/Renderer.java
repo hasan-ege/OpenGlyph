@@ -46,6 +46,24 @@ public final class Renderer {
     public void setFaultListener(FaultListener l) {
         faultListener = l;
     }
+    /** Told (from the render thread) when the matrix starts / stops having something to show. */
+    public interface ActiveListener {
+        void onActiveChanged(boolean active);
+    }
+    private volatile ActiveListener activeListener = a -> {};
+    private boolean active;
+
+    public void setActiveListener(ActiveListener l) {
+        activeListener = l;
+    }
+
+    /**
+     * The dimmest hardware level a lit pixel is driven at. At low brightness, dim pixels would
+     * otherwise round down to (nearly) nothing and the matrix would show less than the Settings
+     * preview of the same frame.
+     */
+    static final int HW_MIN_LIT = 8;
+
     private boolean dirty = true;
     private Thread thread;
     private volatile boolean running;
@@ -102,6 +120,12 @@ public final class Renderer {
             effect = winner(now);
             dirty = false;
         }
+        // Active means an effect wants the matrix, even while brightness is 0 (pocket): the
+        // sensors that decide the brightness must keep running then.
+        if ((effect != null) != active) {
+            active = effect != null;
+            activeListener.onActiveChanged(active);
+        }
         if (effect == null || brightness == 0) {
             if (lit) {
                 sink.off();
@@ -134,7 +158,9 @@ public final class Renderer {
         }
         MatrixLayout.gridToLeds(frame.px, leds);
         for (int i = 0; i < leds.length; i++) {
-            leds[i] = (int) ((long) leds[i] * SysfsMatrixSink.HW_MAX * brightness / (Frame.MAX * 255L));
+            if (leds[i] <= 0) continue;
+            leds[i] = Math.max(HW_MIN_LIT,
+                    (int) ((long) leds[i] * SysfsMatrixSink.HW_MAX * brightness / (Frame.MAX * 255L)));
         }
         if (!lit || !java.util.Arrays.equals(leds, lastLeds) || now - lastWriteMs >= REFRESH_MS) {
             sink.show(leds);

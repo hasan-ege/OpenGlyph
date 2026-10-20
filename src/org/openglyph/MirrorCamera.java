@@ -32,6 +32,10 @@ import org.openglyph.core.MatrixLayout;
  * Glyph Mirror: the main rear camera, shrunk to the 25x25 matrix (luminance, auto contrast,
  * mirrored so it moves like a mirror when you face the back of the phone). Long press takes a
  * full-size photo into DCIM/Camera. The camera only runs while the toy is on screen.
+ *
+ * We run as the system uid, so opening a camera would evict a camera app that is using one
+ * (seen on device: Aperture lost the logical camera). So the mirror only opens when no camera is
+ * in use, and lets go as soon as camera access priorities change (another app wants one).
  */
 final class MirrorCamera {
     private static final String TAG = "OpenGlyphMirror";
@@ -48,10 +52,41 @@ final class MirrorCamera {
     private volatile int[] mGrid;
     private boolean mWanted;
 
+    /** Camera ids opened by anyone (including us), from the availability callback. */
+    private final java.util.Set<String> mInUse = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     MirrorCamera(Context context) {
         mContext = context;
         mCameras = context.getSystemService(CameraManager.class);
+        mCameras.registerAvailabilityCallback(mAvailability,
+                new Handler(android.os.Looper.getMainLooper()));
     }
+
+    private final CameraManager.AvailabilityCallback mAvailability =
+            new CameraManager.AvailabilityCallback() {
+        @Override
+        public void onCameraAvailable(String id) {
+            mInUse.remove(id);
+        }
+
+        @Override
+        public void onCameraUnavailable(String id) {
+            mInUse.add(id);
+        }
+
+        @Override
+        public void onCameraAccessPrioritiesChanged() {
+            // Another app came to the front and may want a camera: give ours up.
+            synchronized (MirrorCamera.this) {
+                if (mDevice == null) return;
+                Log.i(TAG, "camera access priorities changed: releasing the mirror camera");
+                // Give the app time to open its camera before we would try again.
+                mBackoffUntil = android.os.SystemClock.uptimeMillis() + 3000;
+                mWanted = false;
+                close();
+            }
+        }
+    };
 
     /** Latest picture (625 grid), or null while the camera is starting / off. */
     int[] grid() {
@@ -73,7 +108,19 @@ final class MirrorCamera {
         return null;
     }
 
+    private long mBackoffUntil;
+    private boolean mLoggedBusy;
+
     private void open() {
+        if (!mInUse.isEmpty() || android.os.SystemClock.uptimeMillis() < mBackoffUntil) {
+            // Opening any camera now would take one from (or conflict with) the app using it.
+            // Not wanted, so the host's next check (once a second) tries again.
+            if (!mLoggedBusy) Log.i(TAG, "a camera is in use " + mInUse + ": mirror stays off");
+            mLoggedBusy = true;
+            mWanted = false;
+            return;
+        }
+        mLoggedBusy = false;
         mThread = new HandlerThread("OpenGlyphMirror");
         mThread.start();
         mHandler = new Handler(mThread.getLooper());

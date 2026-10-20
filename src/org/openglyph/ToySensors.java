@@ -132,9 +132,47 @@ final class ToySensors implements SensorEventListener {
         }
     }
 
+    private boolean mFaceWatch;
+    private volatile Boolean mMatrixDown;
+
+    /** Watches whether the matrix lies face down, while a toy is on screen (any toy). */
+    void setFaceWatch(boolean on) {
+        if (on == mFaceWatch) return;
+        mFaceWatch = on;
+        mMatrixDown = null;
+        if (on) {
+            Sensor a = mSensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (a != null) {
+                mSensors.registerListener(mFaceListener, a, SensorManager.SENSOR_DELAY_NORMAL, mHandler);
+            }
+        } else {
+            mSensors.unregisterListener(mFaceListener);
+        }
+    }
+
+    /** The matrix faces the table (phone on its back), or null before the first reading. */
+    Boolean matrixDown() {
+        return mMatrixDown;
+    }
+
+    private final SensorEventListener mFaceListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent e) {
+            float x = e.values[0], y = e.values[1], z = e.values[2];
+            Boolean was = mMatrixDown;
+            // Hysteresis: once down, it stays down until clearly lifted.
+            mMatrixDown = Boolean.TRUE.equals(was) ? z > 5.0f
+                    : org.openglyph.core.AodPolicy.isMatrixDown(x, y, z);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+    };
+
     void stop() {
         mSensors.unregisterListener(this);
         mSensors.unregisterListener(mShakeListener);
+        setFaceWatch(false);
         mRunning = 0;
     }
 }

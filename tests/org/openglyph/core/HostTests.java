@@ -97,6 +97,21 @@ public final class HostTests {
         host.onLongPress(20200);
         check(host.selected() == sw && sw.isRunning(), "long press reaches the selected toy");
         check(host.isActive(20200 + 60000), "running stopwatch keeps the toy on screen");
+        // Glyph Toys timeout (the stock setting, one value for every toy)
+        {
+            org.openglyph.toys.ToyHost th = new org.openglyph.toys.ToyHost(() -> ctx, clock, battery);
+            check(th.timeoutMs() == 15000, "default toy timeout is 15 s");
+            th.setTimeoutMs(60000);
+            th.onTap(0);
+            check(th.isActive(59000) && !th.isActive(60001), "toy stays on for the chosen timeout");
+            th.onTap(70000);
+            th.hide();
+            check(!th.isActive(70001) && th.selected() == null, "hide (unlock / face down) turns the toy off");
+            th.onTap(70100);
+            check(th.selected() == clock && th.isActive(70100), "a short press brings the toy back");
+            th.setTimeoutMs(0);
+            check(th.timeoutMs() == org.openglyph.toys.ToyHost.IDLE_MS, "invalid timeout falls back");
+        }
         host.setEnabled(java.util.Set.of("clock", "battery"));
         check(host.selected() == null, "disabling the selected toy deselects it");
         sw.onLongPress(30000); // stop
@@ -203,6 +218,12 @@ public final class HostTests {
                 "FACE_DOWN follows orientation");
         check(AodPolicy.shouldShow(AodPolicy.Mode.CHARGING, true, false, true, false),
                 "CHARGING follows the charger");
+        check(!AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, false, false, true)
+                && AodPolicy.shouldShow(AodPolicy.Mode.ALWAYS, true, false, true, false, true),
+                "low battery turns always-on off unless charging");
+        check(AodPolicy.isMatrixDown(0.2f, -0.4f, 9.7f) && !AodPolicy.isMatrixDown(0f, 0f, -9.8f)
+                && !AodPolicy.isMatrixDown(0f, 9.8f, 0.5f), "matrix face down = phone on its back");
+
 
         // Bedtime schedule (Monday = 0)
         int mon = 0, tue = 1, sun = 6;
@@ -382,10 +403,11 @@ public final class HostTests {
         org.openglyph.toys.ToyHost host = new org.openglyph.toys.ToyHost(() -> ctx,
                 all.toArray(new org.openglyph.toys.Toy[0]));
         host.setOrder(java.util.List.of("leveller"));
+        host.setTimeoutMs(30000);
         host.onTap(0);
         check(host.neededSensors(1000) == org.openglyph.toys.Toy.SENSOR_GRAVITY
-                && host.isActive(30000) && !host.isActive(61000) && host.neededSensors(61000) == 0,
-                "sensor toys stay a minute, then their sensors stop");
+                && host.isActive(29000) && !host.isActive(31000) && host.neededSensors(31000) == 0,
+                "sensor toys follow the toy timeout, then their sensors stop");
     }
 
     static void generative() {

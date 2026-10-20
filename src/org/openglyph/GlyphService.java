@@ -69,7 +69,8 @@ public final class GlyphService extends Service {
     private final Effects.ChargingLevel mCharging = new Effects.ChargingLevel();
     private final Effects.IncomingCall mCall = new Effects.IncomingCall();
     private final org.openglyph.toys.CallerId mCallerId = new org.openglyph.toys.CallerId();
-    private volatile boolean mRinging;
+    /** TelephonyManager.CALL_STATE_*: the stock host ignores toy presses during a call. */
+    private volatile int mCallStateNow = TelephonyManager.CALL_STATE_IDLE;
     private final org.openglyph.toys.ProgressBar mProgress = new org.openglyph.toys.ProgressBar();
     private final org.openglyph.toys.Countdown mCountdown = new org.openglyph.toys.Countdown();
 
@@ -156,6 +157,8 @@ public final class GlyphService extends Service {
         mMusic = new MusicVisualizer(this, mHandler, mMusicBars, () -> mRenderer.invalidate());
         mIdleController = new IdleController(this, mHandler, mIdle, mRenderer::invalidate);
         mAmbient = new AmbientController(this, mHandler, () -> mHandler.post(this::applyBrightness));
+        // Pocket / auto brightness sensors only run while the matrix has something to show.
+        mRenderer.setActiveListener(active -> mHandler.post(() -> mAmbient.setMatrixActive(active)));
         applySettings();
         for (String key : GlyphSettings.ALL) {
             getContentResolver().registerContentObserver(
@@ -181,6 +184,9 @@ public final class GlyphService extends Service {
         mChannelWatcher.register(this);
         // Notification sounds live in shared storage, which opens when the user unlocks.
         registerReceiver(mUnlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
+        // As the stock host: toys go off when the phone is unlocked.
+        registerReceiver(mUserPresentReceiver, new IntentFilter(Intent.ACTION_USER_PRESENT),
+                null, mHandler);
         // Sent by the device KeyHandler in system_server; same uid, so PERMISSION holds for it.
         registerReceiver(mButtonReceiver, new IntentFilter(ACTION_GLYPH_BUTTON), PERMISSION,
                 mHandler, Context.RECEIVER_EXPORTED);
@@ -214,6 +220,7 @@ public final class GlyphService extends Service {
         mHandler.removeCallbacks(mPendingTimeout);
         unregisterReceiver(mPowerReceiver);
         unregisterReceiver(mUnlockReceiver);
+        unregisterReceiver(mUserPresentReceiver);
         mChannelWatcher.unregister();
         unregisterReceiver(mButtonReceiver);
         unregisterReceiver(mEssentialKeyReceiver);
@@ -383,6 +390,7 @@ public final class GlyphService extends Service {
             mRenderer.remove(org.openglyph.toys.Hourglass.effect());
         }
         applyBrightness();
+        mToys.setTimeoutMs(GlyphSettings.toyTimeoutMs(getContentResolver()));
         List<String> order = new ArrayList<>(GlyphSettings.activeToys(getContentResolver()));
         order.add(GlyphSettings.OFF);
         mToys.setOrder(order);
@@ -570,6 +578,22 @@ public final class GlyphService extends Service {
         }
     };
 
+    private final BroadcastReceiver mUserPresentReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            hideToys("unlock");
+        }
+    };
+
+    /** Takes the toy off the matrix (it is deselected; a short press brings toys back). */
+    private void hideToys(String why) {
+        if (!mToys.isShowing(SystemClock.uptimeMillis())) return;
+        Log.d(TAG, "toys off: " + why);
+        mToys.hide();
+        mRenderer.invalidate();
+        updateToySensors();
+    }
+
     private final BroadcastReceiver mPowerReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -590,20 +614,30 @@ public final class GlyphService extends Service {
      * Glyph Button (the pressure spot under the matrix), forwarded by the device KeyHandler.
      * Events: down, up, tap, long_press. With toys on, tap shows / cycles toys and long press
      * goes to the toy (stopwatch start/stop/reset); with toys off, tap shows the battery level.
+     * As the stock host: presses do nothing before setup is finished, and during a call they
+     * do not reach the toys; a long press then shows who is calling (Caller ID).
      */
     private final BroadcastReceiver mButtonReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String event = intent.getStringExtra(EXTRA_BUTTON_EVENT);
             Log.d(TAG, "Glyph Button " + event);
+            if (Settings.Secure.getInt(getContentResolver(),
+                    Settings.Secure.USER_SETUP_COMPLETE, 0) == 0) {
+                return;
+            }
             mRenderer.ensureRunning(); // a press always gets a live matrix
             boolean toys = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS);
             long now = SystemClock.uptimeMillis();
-            if ("tap".equals(event) && mRinging) {
-                // Ringing: a short press shows who is calling instead of the next toy.
-                String caller = GlyphNotificationListener.callerName();
-                if (caller != null) mCallerId.show(caller, now);
-            } else if ("tap".equals(event)) {
+            if (mCallStateNow != TelephonyManager.CALL_STATE_IDLE) {
+                if ("long_press".equals(event)) {
+                    String caller = GlyphNotificationListener.callerName();
+                    if (caller != null) mCallerId.show(caller, now);
+                    mRenderer.invalidate();
+                }
+                return;
+            }
+            if ("tap".equals(event)) {
                 if (toys) mToys.onTap(now); else showBatteryLevel();
             } else if ("long_press".equals(event) && toys) {
                 mToys.onLongPress(now);
@@ -633,6 +667,8 @@ public final class GlyphService extends Service {
      */
     private void updateToySensors() {
         mHandler.removeCallbacks(mSensorCheck);
+        mHandler.removeCallbacks(mMatrixDownCheck);
+        mMatrixDownCheck.run();
         int needed = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS)
                 ? mToys.neededSensors(SystemClock.uptimeMillis()) : 0;
         mToySensors.setWanted(needed);
@@ -640,6 +676,37 @@ public final class GlyphService extends Service {
         if (needed != 0) mHandler.postDelayed(mSensorCheck, 1000);
         mToySensors.refreshLocation(SystemClock.uptimeMillis());
     }
+
+    /**
+     * Toys go off when the matrix is laid face down (the stock host does the same). Gravity
+     * runs only while a toy is on screen; only the change to face down counts, so a toy shown
+     * while the phone already lies on its back stays.
+     */
+    private final Runnable mMatrixDownCheck = new Runnable() {
+        private Boolean mWasDown;
+
+        @Override
+        public void run() {
+            long now = SystemClock.uptimeMillis();
+            boolean showing = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS)
+                    && mToys.isShowing(now);
+            mToySensors.setFaceWatch(showing);
+            if (!showing) {
+                mWasDown = null;
+                return;
+            }
+            Boolean down = mToySensors.matrixDown();
+            if (down != null) {
+                if (down && Boolean.FALSE.equals(mWasDown)) {
+                    mWasDown = null;
+                    hideToys("face down");
+                    return;
+                }
+                mWasDown = down;
+            }
+            mHandler.postDelayed(this, 500);
+        }
+    };
 
     private final Runnable mSensorCheck = this::updateToySensors;
     private final Runnable mMirrorShot = () -> {
@@ -655,8 +722,8 @@ public final class GlyphService extends Service {
             boolean show = GlyphSettings.flag(getContentResolver(), GlyphSettings.CALLS);
             mCall.setRinging(show && state == TelephonyManager.CALL_STATE_RINGING,
                     SystemClock.uptimeMillis());
-            mRinging = state == TelephonyManager.CALL_STATE_RINGING;
-            if (!mRinging) mCallerId.hide();
+            mCallStateNow = state;
+            if (state == TelephonyManager.CALL_STATE_IDLE) mCallerId.hide();
             mRenderer.invalidate();
         }
     }

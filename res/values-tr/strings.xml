@@ -55,6 +55,9 @@
     <string name="aod_face_down">Yüzüstü konunca</string>
     <string name="aod_charging">Şarj olurken</string>
     <string name="settings_aod_choose">Oyuncak</string>
+    <string name="settings_aod_added">%1$s etkin Glyph Oyuncaklarına eklendi.</string>
+    <string name="toys_timeout">Glyph Oyuncakları zaman aşımı</string>
+    <string name="toys_timeout_summary">Zaman aşımının yanı sıra Glyph Oyuncakları telefonun kilidi açılınca ya da matris yüzüstü konunca kapanır. Glyph Button\'a kısa basınca her zaman geri gelir.</string>
     <string name="settings_aod_footer">Ekran kapalıyken oyuncak kısık gösterilir. Glyph Matrix SDK ile yapılmış oyuncaklar her zaman açık desteği varsa burada görünür. Uyku programı bunu kapatır.</string>
 
     <string name="settings_notifications_main">Bildirimlerde yan</string>
