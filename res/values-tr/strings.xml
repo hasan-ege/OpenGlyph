@@ -170,6 +170,9 @@
     <string name="toy_off_summary">Matrisi kapatır. Hep en sonda; taşınamaz ve kaldırılamaz</string>
     <string name="settings_call_voice">Arama sesi</string>
     <string name="settings_call_voice_short">Karşıdakinin sesi dalga olarak</string>
+    <string name="settings_vis_mode">Görselleştirme modu</string>
+    <string name="settings_vis_fixed_short">Sabit · her sütun bir frekans</string>
+    <string name="settings_vis_moving_short">Hareketli · kayan ses dalgası</string>
     <string name="settings_music">Müzik görselleştirme</string>
     <string name="settings_music_short">Hoparlör sesinin dalga formu</string>
     <string name="pattern_generative">Üretken</string>

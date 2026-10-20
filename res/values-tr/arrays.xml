@@ -16,4 +16,9 @@
         <item>10 dakika</item>
         <item>30 dakika</item>
     </string-array>
+    <!-- Visualiser modes, in the order FIXED, MOVING -->
+    <string-array name="vis_mode_entries">
+        <item>Sabit: her sütun bir frekans</item>
+        <item>Hareketli: kayan ses dalgası</item>
+    </string-array>
 </resources>

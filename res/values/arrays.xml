@@ -68,4 +68,9 @@
         <item>10 minutes</item>
         <item>30 minutes</item>
     </string-array>
+    <!-- Visualiser modes, in the order FIXED, MOVING -->
+    <string-array name="vis_mode_entries">
+        <item>Fixed: a column per frequency</item>
+        <item>Moving: a scrolling sound wave</item>
+    </string-array>
 </resources>

@@ -180,6 +180,9 @@
     <string name="toy_off_summary">Turns the matrix off. Always last; cannot be moved or removed</string>
     <string name="settings_call_voice">Call voice</string>
     <string name="settings_call_voice_short">The caller\'s voice as a wave</string>
+    <string name="settings_vis_mode">Visualiser mode</string>
+    <string name="settings_vis_fixed_short">Fixed · a column per frequency</string>
+    <string name="settings_vis_moving_short">Moving · a scrolling sound wave</string>
     <string name="settings_music">Music visualisation</string>
     <string name="settings_music_short">Waveform of the speaker\'s sound</string>
     <string name="pattern_generative">Generative</string>

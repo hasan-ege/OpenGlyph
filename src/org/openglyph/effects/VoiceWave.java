@@ -4,42 +4,40 @@ import org.openglyph.core.Effect;
 import org.openglyph.core.Frame;
 
 /**
- * A voice waveform, as in Nothing's Phone (3) call shot: a one-pixel line across the matrix,
- * with jagged vertical strokes that are tallest in the middle and weaken column by column into
- * the flat line towards both ends.
+ * Visualiser, "Moving" mode: a voice waveform, as in Nothing's Phone (3) call shot. A line across
+ * the matrix with jagged strokes that are tallest in the middle and weaken column by column into
+ * the line towards both ends.
  *
  * Each {@link #push} is one short slice of sound: the positive and negative peaks of its last
- * few milliseconds ({@link #WINDOW_MS}, a couple of voice periods, which keeps the strokes
- * jagged like the original; a whole slice's peak barely changes from slice to slice). The newest
- * slice is drawn in the centre column and older ones drift outwards, alternating between the
- * left and the right half: the shape is symmetric, but the two sides are not mirror copies.
- * Every lit pixel is at full brightness. An automatic gain keeps loud speech near full height
- * and lets quiet passages fall back to the line.
+ * {@link #WINDOW_MS}. The newest slice is the centre column and older ones drift outwards, the
+ * same on both sides (a mirror). Each column goes one way only, towards the stronger of its two
+ * peaks, and is as bright as it is tall, so silence is a barely lit line.
+ *
+ * The constants are the "Moving" preset tuned in tools/generator/visualizer.html.
  */
 public final class VoiceWave implements Effect {
     static final int CENTER = 12;
-    /** Columns on each side of the centre (2..22 are lit). */
-    static final int SPAN = 10;
+    /** Columns on each side of the centre (the whole middle row). */
+    static final int SPAN = 12;
     /** Rows above / below the line at full level. */
-    static final int MAX_H = 7;
-    /** The strokes weaken column by column away from the centre and meet the line here. */
-    static final int TAPER_END = 9;
-    /** Shape of that fade (cos^FADE): 2 gives about 80% at 3 columns out, 45% at 5, 15% at 7. */
-    static final double FADE = 2;
+    static final int MAX_H = 10;
+    /** The strokes weaken away from the centre (cos^FADE) and meet the line at TAPER_END. */
+    static final int TAPER_END = 12;
+    static final double FADE = 0.5;
     static final long STALE_MS = 400;
-    /** How much of each slice is measured (tools/generator/visualizer.html "windowMs"). */
-    public static final int WINDOW_MS = 6;
-    /** Peaks (0..1 of full scale) below this are silence: just the line. */
-    static final float GATE = 0.015f;
-    static final float GAIN_TARGET = 0.6f, GAIN_SPEED = 0.06f, GAIN_MAX = 40f;
+    /** How much of each slice is measured: short windows keep the strokes jagged. */
+    public static final double WINDOW_MS = 1;
+    /** Input level (the simulator's three band gains, all 0.4). */
+    static final float INPUT_GAIN = 0.4f;
+    static final float GAIN_TARGET = 0.65f, GAIN_SPEED = 0.005f, GAIN_MAX = 3f;
     /** Above 1 expands: loud moments stand out as spikes instead of a solid block. */
     static final double CURVE = 1.5;
+    /** Brightness for silence, and how brightness follows the stroke's height. */
+    static final double MIN_BRIGHT = 0.01, BRIGHT_CURVE = 1;
 
     private final int priority;
-    private final float[] leftUp = new float[SPAN + 1], leftDown = new float[SPAN + 1];
-    private final float[] rightUp = new float[SPAN + 1], rightDown = new float[SPAN + 1];
-    private float centerUp, centerDown;
-    private boolean nextLeft = true;
+    /** Per column distance from the centre (0 = centre): the newest slice first. */
+    private final float[] up = new float[SPAN + 1], down = new float[SPAN + 1];
     private float gain = 4f;
     private volatile long updatedMs = Long.MIN_VALUE;
 
@@ -54,35 +52,26 @@ public final class VoiceWave implements Effect {
      * @param neg largest negative sample (as a positive number), 0..1 of full scale
      */
     public synchronized void push(float pos, float neg, long nowMs) {
+        pos *= INPUT_GAIN;
+        neg *= INPUT_GAIN;
         float peak = Math.max(pos, neg);
-        if (peak > GATE) {
-            gain += (Math.min(GAIN_MAX, GAIN_TARGET / peak) - gain) * GAIN_SPEED;
-        }
-        float up = level(pos), down = level(neg);
-        // The previous centre slice moves out to one side; the new one takes the centre.
-        float[] u = nextLeft ? leftUp : rightUp, d = nextLeft ? leftDown : rightDown;
-        System.arraycopy(u, 1, u, 2, SPAN - 1);
-        System.arraycopy(d, 1, d, 2, SPAN - 1);
-        u[1] = centerUp;
-        d[1] = centerDown;
-        centerUp = up;
-        centerDown = down;
-        nextLeft = !nextLeft;
+        if (peak > 0) gain += (Math.min(GAIN_MAX, GAIN_TARGET / peak) - gain) * GAIN_SPEED;
+        System.arraycopy(up, 0, up, 1, SPAN);
+        System.arraycopy(down, 0, down, 1, SPAN);
+        up[0] = level(pos);
+        down[0] = level(neg);
         updatedMs = nowMs;
     }
 
     private float level(float v) {
-        if (v <= GATE) return 0;
+        if (v <= 0) return 0;
         return (float) Math.min(1, Math.pow(v * gain, CURVE));
     }
 
     public synchronized void stop() {
         updatedMs = Long.MIN_VALUE;
-        java.util.Arrays.fill(leftUp, 0);
-        java.util.Arrays.fill(leftDown, 0);
-        java.util.Arrays.fill(rightUp, 0);
-        java.util.Arrays.fill(rightDown, 0);
-        centerUp = centerDown = 0;
+        java.util.Arrays.fill(up, 0);
+        java.util.Arrays.fill(down, 0);
     }
 
     @Override public int priority() { return priority; }
@@ -97,23 +86,27 @@ public final class VoiceWave implements Effect {
         return Math.pow(Math.cos(Math.PI / 2 * k / TAPER_END), FADE);
     }
 
+    /** 0..1 brightness for a stroke at {@code level} (its height after the edge fade). */
+    static double brightness(double level, double min, double curve) {
+        return min + (1 - min) * Math.pow(Math.max(0, Math.min(1, level)), curve);
+    }
+
     @Override public synchronized long render(Frame f, long now) {
         for (int k = 0; k <= SPAN; k++) {
             double w = taper(k);
-            if (k == 0) {
-                stroke(f, CENTER, centerUp, centerDown, w);
-            } else {
-                stroke(f, CENTER - k, leftUp[k], leftDown[k], w);
-                stroke(f, CENTER + k, rightUp[k], rightDown[k], w);
-            }
+            stroke(f, CENTER - k, up[k], down[k], w);
+            if (k > 0) stroke(f, CENTER + k, up[k], down[k], w);
         }
         return 33;
     }
 
-    private static void stroke(Frame f, int x, float up, float down, double w) {
-        f.set(x, CENTER, Frame.MAX);
-        int hu = (int) Math.round(up * w * MAX_H), hd = (int) Math.round(down * w * MAX_H);
-        for (int dy = 1; dy <= hu; dy++) f.set(x, CENTER - dy, Frame.MAX);
-        for (int dy = 1; dy <= hd; dy++) f.set(x, CENTER + dy, Frame.MAX);
+    private static void stroke(Frame f, int x, float u, float d, double w) {
+        // One way per column: towards the stronger peak.
+        if (u >= d) d = 0; else u = 0;
+        int v = (int) Math.round(Frame.MAX * brightness(Math.max(u, d) * w, MIN_BRIGHT, BRIGHT_CURVE));
+        f.set(x, CENTER, v);
+        int hu = (int) Math.round(u * w * MAX_H), hd = (int) Math.round(d * w * MAX_H);
+        for (int dy = 1; dy <= hu; dy++) f.set(x, CENTER - dy, v);
+        for (int dy = 1; dy <= hd; dy++) f.set(x, CENTER + dy, v);
     }
 }

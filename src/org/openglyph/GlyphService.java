@@ -103,6 +103,10 @@ public final class GlyphService extends Service {
     /** The other person's voice during a call, just above music. */
     private final org.openglyph.effects.VoiceWave mCallWave =
             new org.openglyph.effects.VoiceWave(org.openglyph.core.Effect.PRIORITY_MUSIC + 1);
+    private final org.openglyph.effects.SpectrumBars mMusicBars =
+            new org.openglyph.effects.SpectrumBars(org.openglyph.core.Effect.PRIORITY_MUSIC);
+    private final org.openglyph.effects.SpectrumBars mCallBars =
+            new org.openglyph.effects.SpectrumBars(org.openglyph.core.Effect.PRIORITY_MUSIC + 1);
     private CallVoiceVisualizer mCallVoice;
     private MusicVisualizer mMusic;
     private ToySensors mToySensors;
@@ -157,11 +161,14 @@ public final class GlyphService extends Service {
         mRenderer.add(mIdle);
         mRenderer.add(mMusicWave);
         mRenderer.add(mCallWave);
+        mRenderer.add(mMusicBars);
+        mRenderer.add(mCallBars);
         mToySensors = new ToySensors(this, mHandler);
         mMirror = new MirrorCamera(this);
         mSounds = new GenerativeSounds(this);
-        mMusic = new MusicVisualizer(this, mHandler, mMusicWave, () -> mRenderer.invalidate());
-        mCallVoice = new CallVoiceVisualizer(mCallWave, () -> mRenderer.invalidate());
+        mMusic = new MusicVisualizer(this, mHandler, mMusicWave, mMusicBars,
+                () -> mRenderer.invalidate());
+        mCallVoice = new CallVoiceVisualizer(mCallWave, mCallBars, () -> mRenderer.invalidate());
         mIdleController = new IdleController(this, mHandler, mIdle, mRenderer::invalidate);
         mAmbient = new AmbientController(this, mHandler, () -> mHandler.post(this::applyBrightness));
         // Pocket / auto brightness sensors only run while the matrix has something to show.
@@ -407,6 +414,9 @@ public final class GlyphService extends Service {
         mEssentialShown = "\u0000"; // icons may have changed: redraw
         GlyphNotificationListener.refreshEssential();
         if (mRecordLed != null) mRecordLed.update();
+        boolean fixed = GlyphSettings.visualizerFixed(getContentResolver());
+        if (mMusic != null) mMusic.setFixed(fixed);
+        if (mCallVoice != null) mCallVoice.setFixed(fixed);
         if (mMusic != null) mMusic.setEnabled(GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.MUSIC));
         updateCallVoice();
         boolean genSounds = GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS);

@@ -13,34 +13,53 @@ import android.util.Log;
 
 import java.util.List;
 
+import org.openglyph.core.Spectrum;
+import org.openglyph.effects.SpectrumBars;
 import org.openglyph.effects.VoiceWave;
 
 /**
  * Music visualisation: while media plays through the phone's own speaker, the output mix is
- * captured (audio effect "Visualizer" on session 0) and drawn as a waveform ({@link VoiceWave}):
- * every {@link #FRAME_MS} the latest slice's positive and negative peaks become one stroke.
+ * captured (audio effect "Visualizer" on session 0, normalised waveform) and drawn in one of two
+ * modes: Moving ({@link VoiceWave}, every {@link #FRAME_MS} the latest slice's peaks become one
+ * stroke) or Fixed ({@link SpectrumBars}, every {@link #FIXED_FRAME_MS} a Hann-windowed FFT of the
+ * waveform, bands from {@link Spectrum#bands}).
  * Headphones, Bluetooth and calls leave the matrix alone (calls have their own source).
  */
 final class MusicVisualizer {
     private static final String TAG = "OpenGlyphMusic";
     /** One stroke per slice; the same rate as tools/generator/visualizer.html. */
     static final long FRAME_MS = 40;
+    static final long FIXED_FRAME_MS = 16;
 
     private final Context mContext;
     private final Handler mHandler;
     private final AudioManager mAudio;
     private final VoiceWave mWave;
+    private final SpectrumBars mBars;
+    private volatile boolean mFixed = true;
+    private float[] mSamples, mMag;
+    private final float[] mBands = new float[SpectrumBars.BANDS];
     private final Runnable mInvalidate;
     private boolean mEnabled;
     private Visualizer mVisualizer;
     private byte[] mWaveform;
 
-    MusicVisualizer(Context context, Handler handler, VoiceWave wave, Runnable invalidate) {
+    MusicVisualizer(Context context, Handler handler, VoiceWave wave, SpectrumBars bars,
+            Runnable invalidate) {
         mContext = context;
         mHandler = handler;
         mAudio = context.getSystemService(AudioManager.class);
         mWave = wave;
+        mBars = bars;
         mInvalidate = invalidate;
+    }
+
+    /** Fixed (frequency columns) or Moving (scrolling wave). */
+    void setFixed(boolean fixed) {
+        if (fixed == mFixed) return;
+        mFixed = fixed;
+        if (fixed) mWave.stop(); else mBars.stop();
+        mInvalidate.run();
     }
 
     void setEnabled(boolean on) {
@@ -116,6 +135,7 @@ final class MusicVisualizer {
             Log.i(TAG, "music visualisation off");
         }
         mWave.stop();
+        mBars.stop();
         mInvalidate.run();
     }
 
@@ -124,22 +144,41 @@ final class MusicVisualizer {
         public void run() {
             Visualizer v = mVisualizer;
             if (v == null) return;
+            boolean fixed = mFixed;
             if (v.getWaveForm(mWaveform) == Visualizer.SUCCESS) {
-                // 8-bit unsigned samples, 128 = silence.
-                int max = 128, min = 128;
-                int n = (int) Math.min(mWaveform.length,
-                        (long) v.getSamplingRate() / 1000 * VoiceWave.WINDOW_MS / 1000);
-                for (int i = mWaveform.length - Math.max(8, n); i < mWaveform.length; i++) {
-                    int s = mWaveform[i] & 0xff;
-                    if (s > max) max = s;
-                    if (s < min) min = s;
-                }
-                mWave.push((max - 128) / 127f, (128 - min) / 128f, SystemClock.uptimeMillis());
+                if (fixed) fixedFrame(v); else movingFrame(v);
                 mInvalidate.run();
             }
-            mHandler.postDelayed(this, FRAME_MS);
+            mHandler.postDelayed(this, fixed ? FIXED_FRAME_MS : FRAME_MS);
         }
     };
+
+    /** The last WINDOW_MS: positive and negative peaks (8-bit unsigned, 128 = silence). */
+    private void movingFrame(Visualizer v) {
+        int max = 128, min = 128;
+        int n = (int) Math.min(mWaveform.length,
+                v.getSamplingRate() / 1000.0 * VoiceWave.WINDOW_MS / 1000);
+        for (int i = mWaveform.length - Math.max(8, n); i < mWaveform.length; i++) {
+            int s = mWaveform[i] & 0xff;
+            if (s > max) max = s;
+            if (s < min) min = s;
+        }
+        mWave.push((max - 128) / 127f, (128 - min) / 128f, SystemClock.uptimeMillis());
+    }
+
+    private void fixedFrame(Visualizer v) {
+        int n = Integer.highestOneBit(mWaveform.length);
+        if (mSamples == null || mSamples.length != n) {
+            mSamples = new float[n];
+            mMag = new float[n / 2 + 1];
+        }
+        int off = mWaveform.length - n;
+        for (int i = 0; i < n; i++) mSamples[i] = ((mWaveform[off + i] & 0xff) - 128) / 128f;
+        Spectrum.magnitudes(mSamples, 0, n, mMag);
+        double binHz = v.getSamplingRate() / 1000.0 / n;
+        Spectrum.bands(mMag, n / 2 + 1, binHz, SpectrumBars.F_MIN, SpectrumBars.F_MAX, mBands);
+        mBars.push(mBands, SystemClock.uptimeMillis());
+    }
 
     void stop() {
         setEnabled(false);

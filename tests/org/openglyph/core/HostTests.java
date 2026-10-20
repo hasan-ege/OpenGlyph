@@ -462,23 +462,48 @@ public final class HostTests {
         wave.push(0, 0, 0);
         wave.render(vf, 0);
         boolean line = true;
-        for (int x = 2; x <= 22; x++) line &= vf.get(x, 12) == Frame.MAX && vf.get(x, 11) == 0 && vf.get(x, 13) == 0;
-        check(line && vf.get(1, 12) == 0 && vf.get(23, 12) == 0, "voice wave: silence is a flat line, columns 2..22");
-        for (int i = 0; i < 40; i++) wave.push(0.3f + 0.2f * (i % 3), 0.25f + 0.15f * (i % 2), 40 * i);
+        for (int x = 0; x <= 24; x++) line &= vf.get(x, 12) > 0 && vf.get(x, 12) < Frame.MAX / 10 && vf.get(x, 11) == 0 && vf.get(x, 13) == 0;
+        check(line, "moving: silence is a dim line across the middle row");
+        for (int i = 0; i < 60; i++) wave.push(i % 2 == 0 ? 0.9f : 0.2f, i % 2 == 0 ? 0.2f : 0.7f, 40 * i);
         vf.clear();
-        wave.render(vf, 40 * 39);
-        int hc = 0, he = 0;
-        for (int y = 0; y < 25; y++) { if (vf.get(12, y) > 0) hc++; if (vf.get(21, y) > 0) he++; }
-        boolean sides = false, uniform = true;
-        for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) {
-            int v = vf.get(x, y);
-            if (v != 0 && v != Frame.MAX) uniform = false;
-            if (vf.get(x, y) != vf.get(24 - x, y)) sides = true;
-        }
-        check(hc >= 6 && he == 1, "voice wave: tall strokes in the middle, the bare line at the ends");
-        check(uniform, "voice wave: every lit pixel at full brightness");
-        check(sides, "voice wave: the two halves are not mirror copies");
-        check(wave.isActive(40 * 39 + 100) && !wave.isActive(40 * 39 + 1000), "voice wave: goes quiet when stale");
+        wave.render(vf, 40 * 59);
+        boolean mirror = true, oneWay = true;
+        for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) mirror &= vf.get(x, y) == vf.get(24 - x, y);
+        for (int x = 0; x < 25; x++) oneWay &= !(vf.get(x, 11) > 0 && vf.get(x, 13) > 0);
+        int hc = 0;
+        for (int y = 0; y < 25; y++) if (vf.get(12, y) > 0) hc++;
+        check(mirror, "moving: both halves mirror each other");
+        check(oneWay, "moving: each column goes one way only");
+        check(hc >= 5 && vf.get(12, 12) > vf.get(23, 12), "moving: tall, bright strokes in the middle; dim at the ends");
+        check(wave.isActive(40 * 59 + 100) && !wave.isActive(40 * 59 + 1000), "moving: goes quiet when stale");
+
+        // Spectrum: a 1 kHz sine lands in the band around 1 kHz.
+        float[] sine = new float[1024];
+        for (int i = 0; i < sine.length; i++) sine[i] = (float) (0.8 * Math.sin(2 * Math.PI * 1000 * i / 48000.0));
+        float[] mag = new float[513], bandsOut = new float[org.openglyph.effects.SpectrumBars.BANDS];
+        Spectrum.magnitudes(sine, 0, 1024, mag);
+        int peakBin = 0;
+        for (int k = 1; k < mag.length; k++) if (mag[k] > mag[peakBin]) peakBin = k;
+        check(Math.abs(peakBin * 48000.0 / 1024 - 1000) < 48 && Math.abs(mag[peakBin] - 0.8) < 0.25, "fft: a sine's bin and amplitude");
+        Spectrum.bands(mag, 513, 48000.0 / 1024, 75, 16000, bandsOut);
+        int loudest = 0;
+        for (int b = 1; b < bandsOut.length; b++) if (bandsOut[b] > bandsOut[loudest]) loudest = b;
+        double lo = 75 * Math.pow(16000 / 75.0, loudest / 25.0), hi = 75 * Math.pow(16000 / 75.0, (loudest + 1) / 25.0);
+        check(lo <= 1050 && hi >= 950, "fft: the 1 kHz sine fills its band");
+
+        org.openglyph.effects.SpectrumBars bars = new org.openglyph.effects.SpectrumBars(Effect.PRIORITY_MUSIC);
+        for (int i = 0; i < 400; i++) bars.push(bandsOut, 16L * i);
+        Frame sf = new Frame();
+        bars.render(sf, 16 * 399);
+        int[] colH = new int[25];
+        for (int x = 0; x < 25; x++) for (int y = 0; y < 25; y++) if (sf.get(x, y) > 0) colH[x]++;
+        boolean tallest = colH[12] >= 7;
+        for (int x = 0; x < 25; x++) if (x != 12) tallest &= colH[x] < colH[12];
+        check(tallest, "fixed: the band that is playing moves to the middle and stands tallest");
+        boolean upDown = true;
+        for (int dy = 1; dy <= 11; dy++) upDown &= (sf.get(12, 12 - dy) > 0) == (sf.get(12, 12 + dy) > 0);
+        check(upDown, "fixed: bars grow up and down alike");
+        check(bars.isActive(16 * 399 + 100) && !bars.isActive(16 * 399 + 1000), "fixed: goes quiet when stale");
     }
 
     static void timerLed() throws Exception {
