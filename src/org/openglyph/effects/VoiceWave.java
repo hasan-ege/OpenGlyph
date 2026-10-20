@@ -5,7 +5,8 @@ import org.openglyph.core.Frame;
 
 /**
  * A voice waveform, as in Nothing's Phone (3) call shot: a one-pixel line across the matrix,
- * with jagged vertical strokes in the middle that settle into the flat line towards both ends.
+ * with jagged vertical strokes that are tallest in the middle and weaken column by column into
+ * the flat line towards both ends.
  *
  * Each {@link #push} is one short slice of sound: the positive and negative peaks of its last
  * few milliseconds ({@link #WINDOW_MS}, a couple of voice periods, which keeps the strokes
@@ -21,8 +22,10 @@ public final class VoiceWave implements Effect {
     static final int SPAN = 10;
     /** Rows above / below the line at full level. */
     static final int MAX_H = 7;
-    /** Columns from the centre at full height; the strokes shrink to the line by {@link #TAPER_END}. */
-    static final int FLAT = 5, TAPER_END = 9;
+    /** The strokes weaken column by column away from the centre and meet the line here. */
+    static final int TAPER_END = 9;
+    /** Shape of that fade (cos^FADE): 2 gives about 80% at 3 columns out, 45% at 5, 15% at 7. */
+    static final double FADE = 2;
     static final long STALE_MS = 400;
     /** How much of each slice is measured (tools/generator/visualizer.html "windowMs"). */
     public static final int WINDOW_MS = 6;
@@ -88,12 +91,10 @@ public final class VoiceWave implements Effect {
         return updatedMs != Long.MIN_VALUE && now - updatedMs < STALE_MS;
     }
 
-    /** 1 near the centre, falling to 0 (the bare line) towards the ends. */
+    /** 1 at the centre, weakening with every column out, 0 (the bare line) from TAPER_END. */
     static double taper(int k) {
-        if (k <= FLAT) return 1;
         if (k >= TAPER_END) return 0;
-        double t = (k - FLAT) / (double) (TAPER_END - FLAT);
-        return 0.5 + 0.5 * Math.cos(Math.PI * t);
+        return Math.pow(Math.cos(Math.PI / 2 * k / TAPER_END), FADE);
     }
 
     @Override public synchronized long render(Frame f, long now) {

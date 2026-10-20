@@ -1,3 +1,5 @@
 tools/test-toy/debug.keystore
 tools/test-toy/*.apk
 tools/test-notify/*.apk
+tools/glyph-live/*.apk
+tools/glyph-live/*.idsig

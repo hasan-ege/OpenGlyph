@@ -41,13 +41,26 @@ audio{width:100%}
 </section>
 <section class="panel">
   <div>
+    <label>Mod</label>
+    <div class="row">
+      <button id="modeFixed">Sabit</button>
+      <button id="modeMoving">Hareketli</button>
+    </div>
+  </div>
+  <div>
     <label>Ses kaynağı</label>
     <div class="row">
-      <button class="primary" id="demo">Demo ritim</button>
+      <button class="primary" id="pc">Bilgisayar sesi</button>
+      <button id="demo">Demo ritim</button>
       <button id="tab">Sekme sesi</button>
       <button id="mic">Mikrofon (konuş)</button>
       <button id="stop">Durdur</button>
     </div>
+  </div>
+  <div>
+    <label>Telefonda canlı</label>
+    <div class="row"><button id="live">Telefona gönder: kapalı</button></div>
+    <div class="meta" id="liveInfo">Telefonda Glyph Live uygulamasını aç; bilgisayarda: adb forward tcp:9090 tcp:9090</div>
   </div>
   <div>
     <label>Dosya</label>
@@ -58,6 +71,16 @@ audio{width:100%}
     <div class="row"><input type="text" id="url" placeholder="https://…/sarki.mp3" style="flex:1"><button id="go">Çal</button></div>
   </div>
   <audio id="player" controls crossorigin="anonymous"></audio>
+  <div>
+    <label>Frekans hazır ayarları</label>
+    <div class="row">
+      <button data-f="20,20000,1,1,1">Tümü</button>
+      <button data-f="300,3400,0,1,0.3">Konuşma</button>
+      <button data-f="20,250,1.5,0,0">Bas</button>
+      <button data-f="250,4000,0,1.2,0">Orta</button>
+      <button data-f="4000,20000,0,0,2">Tiz</button>
+    </div>
+  </div>
   <details open><summary>Parametreler</summary><div id="sliders"></div></details>
   <div class="row"><button id="reset">Varsayılan</button><button id="copy">JSON kopyala</button></div>
   <textarea id="json" spellcheck="false"></textarea>
@@ -68,13 +91,26 @@ audio{width:100%}
 // 1:1 with MusicVisualizer (waveform peaks per slice) + effects.VoiceWave (OpenGlyph), plus knobs.
 const ROWS=[7,11,15,17,19,21,21,23,23,25,25,25,25,25,25,25,23,23,21,21,19,17,15,11,7];
 const EXISTS=new Uint8Array(625);for(let y=0;y<25;y++){const s=(25-ROWS[y])>>1;for(let x=s;x<s+ROWS[y];x++)EXISTS[y*25+x]=1;}
-const DEF={frameMs:40,windowMs:6,span:10,maxH:7,flat:5,taperEnd:9,gate:0.015,gainTarget:0.6,gainSpeed:0.06,gainMax:40,curve:1.5,alternate:1,staleMs:400};
+const DEF={layout:1,order:0,mix:1,fc:600,fmin:40,fmax:16000,tilt:3,attack:0.7,release:0.3,lo:20,hi:20000,gb:1,gm:1,gt:1,frameMs:40,windowMs:6,span:10,maxH:7,fade:2,taperEnd:9,gate:0.015,gainTarget:0.6,gainSpeed:0.06,gainMax:40,curve:1.5,alternate:1,oneSide:3,split:800,bandAvg:0.97,dynB:1,minB:0.15,bCurve:0.8,staleMs:400};
 const SPEC=[
+ ['order','Ortadakiler (0=orta frekanslar, 1=bu seste en çok bulunanlar)',[0,1,1]],
+ ['mix','Yerleşim (1=iki yana karışık, 0=sol bas / sağ tiz)',[0,1,1]],
+ ['fc','Ortanın frekansı Hz (sabit sıralamada)',[100,4000,10]],
+ ['fmin','En düşük bant Hz',[20,500,5]],
+ ['fmax','En yüksek bant Hz',[2000,20000,100]],
+ ['tilt','Tiz telafisi dB/oktav',[0,9,0.5]],
+ ['attack','Yükselme hızı',[0.05,1,0.01]],
+ ['release','Düşme hızı',[0.02,1,0.01]],
+ ['lo','Alt frekans Hz (bilgisayar sesi)',[20,2000,10]],
+ ['hi','Üst frekans Hz (bilgisayar sesi)',[200,20000,100]],
+ ['gb','Bas kazancı (<250 Hz)',[0,4,0.05]],
+ ['gm','Orta kazancı (250 Hz–4 kHz)',[0,4,0.05]],
+ ['gt','Tiz kazancı (>4 kHz)',[0,4,0.05]],
  ['frameMs','Dilim (sütun) süresi ms',[16,100,1]],
  ['windowMs','Ölçüm penceresi ms (kısa = sivri)',[1,40,0.5]],
  ['span','Yarı genişlik (sütun)',[6,12,1]],
  ['maxH','En yüksek çizgi (satır)',[3,12,1]],
- ['flat','Tam boy bölge (sütun)',[0,10,1]],
+ ['fade','Kenara doğru zayıflama (yüksek = hızlı)',[0.5,4,0.1]],
  ['taperEnd','Çizgiye inme noktası',[1,12,1]],
  ['gate','Sessizlik eşiği',[0,0.1,0.001]],
  ['gainTarget','Hedef yükseklik',[0.3,1.5,0.01]],
@@ -82,23 +118,48 @@ const SPEC=[
  ['gainMax','En fazla kazanç',[1,80,1]],
  ['curve','Sıkıştırma (1=doğrusal)',[0.3,1.5,0.01]],
  ['alternate','Sol/sağ farklı (0=ayna)',[0,1,1]],
+ ['oneSide','Sütun yönü (0=iki yöne, 1=baskın yöne, 2=sırayla, 3=tiz yukarı / bas aşağı)',[0,3,1]],
+ ['split','Bas/tiz ayrımı Hz (yön için)',[100,4000,50]],
+ ['bandAvg','Bant ortalaması (yüksek = yavaş uyum)',[0.8,0.995,0.005]],
+ ['dynB','Parlaklık sese göre (0=tek renk)',[0,1,0.01]],
+ ['minB','En düşük parlaklık',[0,1,0.01]],
+ ['bCurve','Parlaklık eğrisi (düşük = çabuk parlar)',[0.2,3,0.05]],
 ];
-let P={...DEF};try{Object.assign(P,JSON.parse(localStorage.getItem('og-wave')||'{}'))}catch(e){}
+// Two modes, each with its own preset (tuned by hand) and its own saved tweaks.
+const PRESETS={
+ moving:{layout:0,lo:20,hi:14800,gb:0.4,gm:0.4,gt:0.4,frameMs:40,windowMs:1,span:12,maxH:10,fade:0.5,taperEnd:12,
+   gate:0,gainTarget:0.65,gainSpeed:0.005,gainMax:3,curve:1.5,alternate:0,oneSide:1,dynB:1,minB:0.01,bCurve:1,staleMs:400},
+ fixed:{layout:1,order:1,mix:0,fc:760,fmin:75,fmax:16000,tilt:3,attack:1,release:0.5,lo:20,hi:20000,gb:1,gm:1,gt:1,
+   frameMs:16,windowMs:40,span:12,maxH:11,fade:1,taperEnd:12,gate:0,gainTarget:0.52,gainSpeed:0.05,gainMax:7,curve:1.5,
+   alternate:0,oneSide:0,split:650,bandAvg:0.8,dynB:1,minB:0.22,bCurve:1.15,staleMs:400},
+};
+let MODES={mode:'fixed',fixed:{},moving:{}};
+try{Object.assign(MODES,JSON.parse(localStorage.getItem('og-wave-modes')||'{}'))}catch(e){}
+function modeParams(m){return {...DEF,...PRESETS[m],...(MODES[m]||{}),layout:PRESETS[m].layout};}
+let P=modeParams(MODES.mode);
 const sl=document.getElementById('sliders'),js=document.getElementById('json');
 function buildSliders(){sl.innerHTML='';for(const [k,t,[a,b,s]] of SPEC){const d=document.createElement('div');d.className='sl';
   d.innerHTML=`<span>${t}</span><output>${P[k]}</output><input type="range" min="${a}" max="${b}" step="${s}" value="${P[k]}">`;
   const i=d.querySelector('input'),o=d.querySelector('output');i.oninput=()=>{P[k]=+i.value;o.textContent=P[k];save();};sl.appendChild(d);}save();}
-function save(){js.value=JSON.stringify(P,null,1);try{localStorage.setItem('og-wave',JSON.stringify(P))}catch(e){}}
+function save(){js.value=JSON.stringify(P,null,1);MODES[MODES.mode]={...P};
+  try{localStorage.setItem('og-wave-modes',JSON.stringify(MODES))}catch(e){}markMode();}
+function markMode(){const f=document.getElementById('modeFixed'),m=document.getElementById('modeMoving');
+  if(f){f.className=MODES.mode==='fixed'?'primary':'';m.className=MODES.mode==='moving'?'primary':'';}}
+function setMode(m){MODES.mode=m;P=modeParams(m);buildSliders();}
 js.oninput=()=>{try{Object.assign(P,JSON.parse(js.value));buildSliders();}catch(e){}};
-document.getElementById('reset').onclick=()=>{P={...DEF};buildSliders();};
+document.getElementById('reset').onclick=()=>{MODES[MODES.mode]={};P=modeParams(MODES.mode);buildSliders();};
+document.getElementById('modeFixed').onclick=()=>setMode('fixed');
+document.getElementById('modeMoving').onclick=()=>setMode('moving');
 document.getElementById('copy').onclick=()=>navigator.clipboard.writeText(js.value);
 buildSliders();
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{const [lo,hi,gb,gm,gt]=b.dataset.f.split(',').map(Number);
+  Object.assign(P,{lo,hi,gb,gm,gt});buildSliders();});
 
 // ---- audio ----
 let ac=null,an=null,src=null,stream=null,demoNodes=[];
 const player=document.getElementById('player');let mediaSrc=null;
 function ctx(){if(!ac){ac=new AudioContext();an=ac.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0;}return ac;}
-function stopAll(){if(src&&src!==mediaSrc){try{src.disconnect()}catch(e){}}src=null;
+function stopAll(){if(pcES){pcES.close();pcES=null;}if(src&&src!==mediaSrc){try{src.disconnect()}catch(e){}}src=null;
   if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
   demoNodes.forEach(n=>{try{n.stop()}catch(e){}});demoNodes=[];clearInterval(demoTimer);player.pause();}
 function connect(node,toSpeaker){node.connect(an);if(toSpeaker)node.connect(ac.destination);src=node;}
@@ -134,6 +195,19 @@ document.getElementById('demo').onclick=async()=>{stopAll();ctx();await ac.resum
   sched();demoTimer=setInterval(sched,50);info('Demo ritim 118 BPM');};
 function info(t){document.getElementById('info').textContent=t;}
 
+// ---- the computer's own sound output, via tools/generator/pc-audio.py (peaks only) ----
+let pcES=null,pcPos=0,pcNeg=0,pcLow=0,pcHigh=0,pcKey='',pcKeyAt=0,specRaw=null;
+function nBands(){return 2*P.span+1;}
+function pcQuery(){const f=`frame=${P.frameMs}&lo=${P.lo}&hi=${P.hi}&gb=${P.gb}&gm=${P.gm}&gt=${P.gt}`;
+  return P.layout===1?`spectrum?${f}&bands=${nBands()}&fmin=${P.fmin}&fmax=${P.fmax}`:`peaks?${f}&win=${P.windowMs}&split=${P.split}`;}
+function pcConnect(){if(pcES)pcES.close();pcKey=pcQuery();specRaw=null;
+  pcES=new EventSource(`http://127.0.0.1:8767/${pcKey}`);
+  pcES.onmessage=e=>{const v=e.data.split(',').map(Number);
+    if(P.layout===1){specRaw=v;}else{pcPos=v[0];pcNeg=v[1];pcLow=v[2]||0;pcHigh=v[3]||0;}};
+  pcES.onerror=()=>info('Bilgisayar sesi köprüsü kapalı: python3 tools/generator/pc-audio.py');
+  pcES.onopen=()=>info('Bilgisayar sesi (bilgisayarda çalan her şey)');}
+document.getElementById('pc').onclick=()=>{stopAll();pcConnect();};
+
 // ---- VoiceWave emulation ----
 const S_MAX=12;const L={u:new Float32Array(S_MAX+1),d:new Float32Array(S_MAX+1)},R={u:new Float32Array(S_MAX+1),d:new Float32Array(S_MAX+1)};
 let cu=0,cd=0,nextLeft=true,gain=4,lastUpd=-1e9,lastPeak=0;
@@ -147,10 +221,60 @@ function slice(){ // Visualizer.getWaveForm: latest 1024 samples as 8-bit
   const buf=new Float32Array(an.fftSize);an.getFloatTimeDomainData(buf);let mx=0,mn=0;
   const n=Math.max(8,Math.round(P.windowMs/1000*ac.sampleRate));for(let i=buf.length-n;i<buf.length;i++){const v=Math.round(buf[i]*128)/128;if(v>mx)mx=v;if(v<mn)mn=v;}
   push(mx,-mn);}
-function taper(k){if(k<=P.flat)return 1;if(k>=P.taperEnd)return 0;const t=(k-P.flat)/(P.taperEnd-P.flat);return .5+.5*Math.cos(Math.PI*t);}
+// Treble up, bass down: each band is compared with its own running average (music has far more
+// bass than treble, so raw levels would point everything down); the relatively stronger band
+// picks the direction, and the slice's overall peak sets the height.
+let avgLow=0.05,avgHigh=0.02;
+function pushByBand(){const a=P.bandAvg;
+  avgLow=Math.max(1e-4,a*avgLow+(1-a)*pcLow);avgHigh=Math.max(1e-4,a*avgHigh+(1-a)*pcHigh);
+  const m=Math.max(pcPos,pcNeg);
+  if(pcHigh/avgHigh>=pcLow/avgLow)push(m,0);else push(0,m);}
+// ---- frequency columns: each column one log-spaced band; the most common bands in the middle,
+// the niche ones towards the edges (placed centre, left, right, left, ...). Bass bands (below
+// split) draw downwards, treble bands upwards; height and brightness follow the band's level.
+let specLv=new Float32Array(25),specAvg=new Float32Array(25),specOrder=[],orderAt=-1e9,specN=0;
+function bandCenters(n){const out=[];for(let b=0;b<n;b++)out.push(P.fmin*Math.pow(P.fmax/P.fmin,(b+.5)/n));return out;}
+// Rank r goes to slots(n)[r]: the centre first, then a pair of columns per step outwards. With
+// mix=1 the pair's sides swap every step, so each side gets bass and treble columns by turns.
+function slots(n){const s=[12];for(let k=1;s.length<n;k++){const swap=P.mix===1&&k%2===0;
+  s.push(swap?12+k:12-k);if(s.length<n)s.push(swap?12-k:12+k);}return s;}
+function rankBands(n,now){const fc=bandCenters(n);let score;
+  if(P.order===1)score=fc.map((f,b)=>specAvg[b]);          // most present in this sound first
+  else score=fc.map(f=>-Math.abs(Math.log2(f/P.fc)));       // closest to the centre frequency first
+  specOrder=[...Array(n).keys()].sort((a,b)=>score[b]-score[a]);orderAt=now;}
+function specFromAnalyser(n){ // demo / file / tab sources: the same bands from the analyser
+  const db=new Float32Array(an.frequencyBinCount);an.getFloatFrequencyData(db);const hz=ac.sampleRate/an.fftSize;
+  const fc=bandCenters(n),out=[];for(let b=0;b<n;b++){const a=P.fmin*Math.pow(P.fmax/P.fmin,b/n),z=P.fmin*Math.pow(P.fmax/P.fmin,(b+1)/n);
+    let m=0;for(let i=Math.max(1,Math.floor(a/hz));i<=Math.ceil(z/hz)&&i<db.length;i++)m=Math.max(m,Math.pow(10,db[i]/20));out.push(Math.min(1,m*2));}
+  return out;}
+function stepSpectrum(raw,now){const n=raw.length;if(n!==specN){specN=n;specLv.fill(0);specAvg.fill(0);orderAt=-1e9;}
+  const fc=bandCenters(n);let peak=0;const t=new Float32Array(n);
+  for(let b=0;b<n;b++){t[b]=raw[b]*Math.pow(10,P.tilt/20*Math.log2(fc[b]/P.fc));peak=Math.max(peak,t[b]);}
+  lastPeak=peak;if(peak>P.gate)gain+=(Math.min(P.gainMax,P.gainTarget/peak)-gain)*P.gainSpeed;
+  for(let b=0;b<n;b++){const v=t[b]<=P.gate/4?0:Math.min(1,Math.pow(t[b]*gain,P.curve));
+    specLv[b]+=(v-specLv[b])*(v>specLv[b]?P.attack:P.release);
+    specAvg[b]=0.995*specAvg[b]+0.005*t[b];}
+  // Fixed order: once per change; by presence: re-ranked every 3 s so columns do not jump about.
+  if(specOrder.length!==n||(P.order===1&&now-orderAt>3000)||(P.order===0&&orderKey!==P.fc+'|'+n)){rankBands(n,now);orderKey=P.fc+'|'+n;}}
+let orderKey='';
+function renderSpectrum(){const g=new Float32Array(625),n=specN;if(!n)return g;const fc=bandCenters(n),sl=slots(n);
+  for(let r=0;r<n;r++){const b=specOrder[r],x=sl[r];if(b===undefined||x<0||x>24)continue;
+    const w=taper(Math.abs(x-12)),lv=specLv[b]*w,h=Math.round(lv*P.maxH),br=bright(lv);
+    const down=fc[b]<P.fc,both=P.oneSide===0;g[12*25+x]=br;
+    for(let dy=1;dy<=h;dy++){if(both||!down)g[(12-dy)*25+x]=br;if(both||down)g[(12+dy)*25+x]=br;}}
+  return g;}
+function taper(k){if(k>=P.taperEnd)return 0;return Math.pow(Math.cos(Math.PI/2*k/P.taperEnd),P.fade);}
+// Brightness follows loudness: each stroke is as bright as it is tall (after the edge fade),
+// from minB for silence up to full; dynB=0 draws every pixel at full brightness.
+function bright(lv){const b=P.minB+(1-P.minB)*Math.pow(Math.max(0,Math.min(1,lv)),P.bCurve);return 1-P.dynB*(1-b);}
 function render(){const g=new Float32Array(625);
-  const st=(x,u,d,w)=>{g[12*25+x]=1;const hu=Math.round(u*w*P.maxH),hd=Math.round(d*w*P.maxH);
-    for(let dy=1;dy<=hu;dy++)g[(12-dy)*25+x]=1;for(let dy=1;dy<=hd;dy++)g[(12+dy)*25+x]=1;};
+  const st=(x,u,d,w)=>{
+    // One direction per column: the stronger side of the slice (oneSide=1), or up and down by
+    // turns (oneSide=2), with the column's larger peak as its height.
+    if(P.oneSide===1||(P.oneSide===3&&u>0&&d>0)){if(u>=d)d=0;else u=0;}
+    else if(P.oneSide===2){const m=Math.max(u,d);if((x&1)===0){u=m;d=0;}else{d=m;u=0;}}
+    const b=bright(Math.max(u,d)*w);g[12*25+x]=b;const hu=Math.round(u*w*P.maxH),hd=Math.round(d*w*P.maxH);
+    for(let dy=1;dy<=hu;dy++)g[(12-dy)*25+x]=b;for(let dy=1;dy<=hd;dy++)g[(12+dy)*25+x]=b;};
   for(let k=0;k<=P.span;k++){const w=taper(k);if(k===0)st(12,cu,cd,w);else{st(12-k,L.u[k],L.d[k],w);st(12+k,R.u[k],R.d[k],w);}}
   return g;}
 const cv=document.getElementById('m'),c2=cv.getContext('2d'),sp=document.getElementById('spec'),s2=sp.getContext('2d');
@@ -162,13 +286,47 @@ function drawMatrix(g){const S=cv.width,cell=S*0.88/25,o=(S-cell*25)/2;
 function drawSpec(){const W=sp.width,H=sp.height;s2.clearRect(0,0,W,H);s2.fillStyle=getComputedStyle(document.body).color;
   const buf=an?new Float32Array(an.fftSize):null;if(!buf)return;an.getFloatTimeDomainData(buf);s2.globalAlpha=.7;
   for(let x=0;x<W;x++){const v=buf[Math.floor(x/W*buf.length)];s2.fillRect(x,H/2-v*H/2,1,Math.max(1,v*H));}s2.globalAlpha=1;}
-let next=0;
-function loop(now){requestAnimationFrame(loop);if(now<next)return;next=now+P.frameMs;
-  if(src&&an){slice();lastUpd=now;}
-  const active=now-lastUpd<P.staleMs;
-  drawMatrix(active?render():new Float32Array(625));drawSpec();
+// ---- live on the phone: tools/glyph-live (POST 625 values to the forwarded port) ----
+// Only one page drives the phone: turning sending on claims the matrix with a new session id;
+// the phone answers 409 to any other page, which then switches itself off.
+let live=false,liveBusy=false,liveSent=0,liveErr=0,sid='';
+const liveBtn=document.getElementById('live'),liveInfo=document.getElementById('liveInfo');
+function setLive(on,msg){live=on;liveBtn.textContent='Telefona gönder: '+(on?'açık':'kapalı');liveBtn.className=on?'primary':'';if(msg)liveInfo.textContent=msg;}
+liveBtn.onclick=async()=>{
+  if(live){sendLive(new Float32Array(625),true);setLive(false);return;}
+  sid=Math.random().toString(36).slice(2);
+  try{await fetch('http://localhost:9090/claim',{method:'POST',body:sid,headers:{'Content-Type':'text/plain'}});setLive(true,'Telefon bu sayfayı gösteriyor');}
+  catch(e){setLive(false,'Telefona ulaşılamadı (Glyph Live açık mı, adb forward kuruldu mu?)');}};
+function sendLive(g,force){if((!live&&!force)||liveBusy)return;liveBusy=true;
+  const body=sid+'|'+Array.from(g,v=>Math.round(Math.max(0,Math.min(1,v))*4095)).join(',');
+  fetch('http://localhost:9090/frame',{method:'POST',body,headers:{'Content-Type':'text/plain'}})
+    .then(r=>{if(r.status===409){setLive(false,'Telefonu şu an başka bir sayfa kullanıyor; burada tekrar açarsan bu sayfaya geçer.');return;}
+      liveSent++;liveErr=0;if(liveSent%25===1)liveInfo.textContent='Telefona gönderilen kare: '+liveSent;})
+    .catch(()=>{liveErr++;liveInfo.textContent='Telefona ulaşılamadı (Glyph Live açık mı, adb forward kuruldu mu?)';})
+    .finally(()=>{liveBusy=false;});}
+
+// The sound is analysed and sent on a worker timer: requestAnimationFrame slows to a few
+// frames a second when the page is partly hidden, which made the phone stutter. Drawing on
+// screen stays on requestAnimationFrame.
+let lastFrame=new Float32Array(625);
+function tick(){const now=performance.now();
+  if(pcES){
+    // Settings changed: reconnect (at most every 250 ms while a slider is being dragged).
+    if(pcQuery()!==pcKey&&now-pcKeyAt>250){pcKeyAt=now;pcConnect();}
+    if(P.layout===1){if(specRaw){stepSpectrum(specRaw,now);lastUpd=now;}}
+    else{if(P.oneSide===3)pushByBand();else push(pcPos,pcNeg);lastUpd=now;}}
+  else if(src&&an){if(P.layout===1)stepSpectrum(specFromAnalyser(nBands()),now);else slice();lastUpd=now;}
+  lastFrame=now-lastUpd<P.staleMs?(P.layout===1?renderSpectrum():render()):new Float32Array(625);sendLive(lastFrame);}
+const ticker=new Worker(URL.createObjectURL(new Blob([
+  'let t=null;onmessage=e=>{clearInterval(t);t=setInterval(()=>postMessage(0),e.data);};'],{type:'text/javascript'})));
+ticker.onmessage=tick;
+let tickMs=0;
+function loop(){requestAnimationFrame(loop);
+  if(tickMs!==P.frameMs){tickMs=P.frameMs;ticker.postMessage(tickMs);}
+  drawMatrix(lastFrame);drawSpec();
   if(src)document.getElementById('info').title=`gain ${gain.toFixed(2)} · peak ${lastPeak.toFixed(3)}`;}
-drawMatrix(new Float32Array(625));requestAnimationFrame(loop);
+drawMatrix(lastFrame);ticker.postMessage(tickMs=P.frameMs);requestAnimationFrame(loop);
+pcConnect();
 </script>
 </body>
 </html>
