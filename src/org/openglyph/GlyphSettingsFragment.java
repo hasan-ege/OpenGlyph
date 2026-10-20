@@ -27,6 +27,7 @@ public final class GlyphSettingsFragment extends GlyphFragment {
     private static final String[] FLAGS = {
         GlyphSettings.TOYS, GlyphSettings.NOTIFICATIONS, GlyphSettings.CALLS,
         GlyphSettings.CHARGING, GlyphSettings.RECORD_LED, GlyphSettings.PROGRESS,
+        GlyphSettings.CALL_VOICE,
     };
 
     @Override

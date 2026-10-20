@@ -29,6 +29,8 @@
     <!-- Music visualisation: analyse the speaker output (Visualizer on the output mix). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Call voice: read the call downlink to draw the other person's voice (measured, never kept). -->
+    <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" />
     <!-- Solar Path toy: the last known location only; no location request is ever made. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 

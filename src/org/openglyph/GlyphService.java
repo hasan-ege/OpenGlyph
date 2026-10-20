@@ -98,7 +98,12 @@ public final class GlyphService extends Service {
     private final ToyHost mToys = new ToyHost(this::toyContext,
             Toys.all().toArray(new Toy[0]));
     private static final int BUILT_IN_TOYS = Toys.all().size();
-    private final Effects.AudioBars mMusicBars = new Effects.AudioBars();
+    private final org.openglyph.effects.VoiceWave mMusicWave =
+            new org.openglyph.effects.VoiceWave(org.openglyph.core.Effect.PRIORITY_MUSIC);
+    /** The other person's voice during a call, just above music. */
+    private final org.openglyph.effects.VoiceWave mCallWave =
+            new org.openglyph.effects.VoiceWave(org.openglyph.core.Effect.PRIORITY_MUSIC + 1);
+    private CallVoiceVisualizer mCallVoice;
     private MusicVisualizer mMusic;
     private ToySensors mToySensors;
     private MirrorCamera mMirror;
@@ -150,11 +155,13 @@ public final class GlyphService extends Service {
         mRenderer.add(mCountdown);
         mRenderer.add(mToys);
         mRenderer.add(mIdle);
-        mRenderer.add(mMusicBars);
+        mRenderer.add(mMusicWave);
+        mRenderer.add(mCallWave);
         mToySensors = new ToySensors(this, mHandler);
         mMirror = new MirrorCamera(this);
         mSounds = new GenerativeSounds(this);
-        mMusic = new MusicVisualizer(this, mHandler, mMusicBars, () -> mRenderer.invalidate());
+        mMusic = new MusicVisualizer(this, mHandler, mMusicWave, () -> mRenderer.invalidate());
+        mCallVoice = new CallVoiceVisualizer(mCallWave, () -> mRenderer.invalidate());
         mIdleController = new IdleController(this, mHandler, mIdle, mRenderer::invalidate);
         mAmbient = new AmbientController(this, mHandler, () -> mHandler.post(this::applyBrightness));
         // Pocket / auto brightness sensors only run while the matrix has something to show.
@@ -230,6 +237,7 @@ public final class GlyphService extends Service {
         mAmbient.stop();
         mToyBridge.stop();
         mMusic.stop();
+        mCallVoice.setActive(false);
         mToySensors.stop();
         mMirror.setWanted(false);
         mBackground.shutdown();
@@ -400,6 +408,7 @@ public final class GlyphService extends Service {
         GlyphNotificationListener.refreshEssential();
         if (mRecordLed != null) mRecordLed.update();
         if (mMusic != null) mMusic.setEnabled(GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.MUSIC));
+        updateCallVoice();
         boolean genSounds = GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS);
         String engine = GlyphSettings.string(getContentResolver(), GlyphSettings.ENGINE, "DIODE")
                 + "|" + GlyphSettings.string(getContentResolver(), GlyphSettings.SEED, "");
@@ -723,12 +732,21 @@ public final class GlyphService extends Service {
             mCall.setRinging(show && state == TelephonyManager.CALL_STATE_RINGING,
                     SystemClock.uptimeMillis());
             mCallStateNow = state;
+            updateCallVoice();
             if (state == TelephonyManager.CALL_STATE_IDLE) mCallerId.hide();
             mRenderer.invalidate();
         }
     }
 
     private final CallState mCallState = new CallState();
+
+    /** The caller's voice on the matrix while a call is connected (and the setting is on). */
+    private void updateCallVoice() {
+        if (mCallVoice == null) return;
+        mCallVoice.setActive(mCallStateNow == TelephonyManager.CALL_STATE_OFFHOOK
+                && GlyphSettings.flag(getContentResolver(), GlyphSettings.ENABLED)
+                && GlyphSettings.flag(getContentResolver(), GlyphSettings.CALL_VOICE));
+    }
 
     private final IOpenGlyph.Stub mBinder = new IOpenGlyph.Stub() {
         @Override

@@ -13,42 +13,33 @@ import android.util.Log;
 
 import java.util.List;
 
-import org.openglyph.effects.Effects;
+import org.openglyph.effects.VoiceWave;
 
 /**
  * Music visualisation: while media plays through the phone's own speaker, the output mix is
- * analysed (audio effect "Visualizer" on session 0) and drawn as 13 bands mirrored left and
- * right (bass in the centre column, highs at both edges), each bar growing up and down. Headphones, Bluetooth and calls leave the matrix alone.
+ * captured (audio effect "Visualizer" on session 0) and drawn as a waveform ({@link VoiceWave}):
+ * every {@link #FRAME_MS} the latest slice's positive and negative peaks become one stroke.
+ * Headphones, Bluetooth and calls leave the matrix alone (calls have their own source).
  */
 final class MusicVisualizer {
     private static final String TAG = "OpenGlyphMusic";
-    // Tuned in tools/generator/visualizer.html (the same analysis, in the browser).
-    private static final long FRAME_MS = 16;
-    private static final double F_MIN = 200, F_MAX = 2000;
-    private static final float RELEASE = 0.48f;
-    private static final float GAIN_TARGET = 0.47f, GAIN_SPEED = 0.05f;
-    /** Magnitude scale the browser emulation was tuned with (byteScale). */
-    private static final double MAG_SCALE = 4;
-    private static final int BANDS = 13;
-    private static final int COLUMNS = 25;
+    /** One stroke per slice; the same rate as tools/generator/visualizer.html. */
+    static final long FRAME_MS = 40;
 
     private final Context mContext;
     private final Handler mHandler;
     private final AudioManager mAudio;
-    private final Effects.AudioBars mBars;
+    private final VoiceWave mWave;
     private final Runnable mInvalidate;
     private boolean mEnabled;
     private Visualizer mVisualizer;
-    private byte[] mFft;
-    private final float[] mLevels = new float[BANDS];
-    private final float[] mOut = new float[COLUMNS];
-    private float mGain = 1f / 40;
+    private byte[] mWaveform;
 
-    MusicVisualizer(Context context, Handler handler, Effects.AudioBars bars, Runnable invalidate) {
+    MusicVisualizer(Context context, Handler handler, VoiceWave wave, Runnable invalidate) {
         mContext = context;
         mHandler = handler;
         mAudio = context.getSystemService(AudioManager.class);
-        mBars = bars;
+        mWave = wave;
         mInvalidate = invalidate;
     }
 
@@ -104,10 +95,11 @@ final class MusicVisualizer {
             Visualizer v = new Visualizer(0);
             int[] range = Visualizer.getCaptureSizeRange();
             v.setCaptureSize(Math.min(range[1], 1024));
-            v.setScalingMode(Visualizer.SCALING_MODE_AS_PLAYED);
+            // Normalised: the wave keeps its size at any volume (8-bit samples are coarse when quiet).
+            v.setScalingMode(Visualizer.SCALING_MODE_NORMALIZED);
             v.setEnabled(true);
             mVisualizer = v;
-            mFft = new byte[v.getCaptureSize()];
+            mWaveform = new byte[v.getCaptureSize()];
             mHandler.post(mPoll);
             Log.i(TAG, "music visualisation on");
         } catch (RuntimeException e) {
@@ -123,8 +115,7 @@ final class MusicVisualizer {
             mVisualizer = null;
             Log.i(TAG, "music visualisation off");
         }
-        java.util.Arrays.fill(mLevels, 0);
-        mBars.stop();
+        mWave.stop();
         mInvalidate.run();
     }
 
@@ -133,41 +124,22 @@ final class MusicVisualizer {
         public void run() {
             Visualizer v = mVisualizer;
             if (v == null) return;
-            if (v.getFft(mFft) == Visualizer.SUCCESS) {
-                analyse(mFft, v.getSamplingRate() / 1000);
-                mBars.setLevels(mOut, SystemClock.uptimeMillis());
+            if (v.getWaveForm(mWaveform) == Visualizer.SUCCESS) {
+                // 8-bit unsigned samples, 128 = silence.
+                int max = 128, min = 128;
+                int n = (int) Math.min(mWaveform.length,
+                        (long) v.getSamplingRate() / 1000 * VoiceWave.WINDOW_MS / 1000);
+                for (int i = mWaveform.length - Math.max(8, n); i < mWaveform.length; i++) {
+                    int s = mWaveform[i] & 0xff;
+                    if (s > max) max = s;
+                    if (s < min) min = s;
+                }
+                mWave.push((max - 128) / 127f, (128 - min) / 128f, SystemClock.uptimeMillis());
                 mInvalidate.run();
             }
             mHandler.postDelayed(this, FRAME_MS);
         }
     };
-
-    /**
-     * FFT bytes (re/im pairs) to 13 log-spaced bands, 200 Hz .. 2 kHz, with instant attack,
-     * quick release and an automatic gain that follows the loudest band.
-     */
-    private void analyse(byte[] fft, int sampleRateHz) {
-        int bins = fft.length / 2;
-        double binHz = sampleRateHz / 2.0 / bins;
-        float loudest = 0;
-        for (int b = 0; b < BANDS; b++) {
-            double f0 = F_MIN * Math.pow(F_MAX / F_MIN, b / (double) BANDS);
-            double f1 = F_MIN * Math.pow(F_MAX / F_MIN, (b + 1) / (double) BANDS);
-            int i0 = Math.max(1, (int) (f0 / binHz)), i1 = Math.max(i0 + 1, (int) (f1 / binHz));
-            double sum = 0;
-            for (int i = i0; i < i1 && i < bins; i++) {
-                double re = fft[2 * i], im = fft[2 * i + 1];
-                sum = Math.max(sum, Math.hypot(re, im) * MAG_SCALE);
-            }
-            float level = (float) Math.log10(1 + sum);
-            loudest = Math.max(loudest, level);
-            float target = level * mGain * 40;
-            mLevels[b] = target > mLevels[b] ? target : mLevels[b] * RELEASE + target * (1 - RELEASE);
-        }
-        for (int x = 0; x < COLUMNS; x++) mOut[x] = Math.min(1, mLevels[Math.abs(x - COLUMNS / 2)]);
-        // Gain: aim the loudest band at GAIN_TARGET of the bar height, adapting over ~a second.
-        if (loudest > 0) mGain += ((GAIN_TARGET / 40 / loudest) - mGain) * GAIN_SPEED;
-    }
 
     void stop() {
         setEnabled(false);

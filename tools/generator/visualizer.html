@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Glyph Visualizer</title>
+<title>Glyph Voice Wave</title>
 <style>
 :root{--bg:#f2efe9;--fg:#141414;--muted:#6d6d6d;--card:#fff;--line:#ddd;--accent:#d71921}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e0e0e;--fg:#eee;--muted:#8d8d8d;--card:#191919;--line:#2a2a2a}}
@@ -33,7 +33,7 @@ audio{width:100%}
 </head>
 <body>
 <main>
-<h1>Glyph Visualizer</h1>
+<h1>Glyph Voice Wave</h1>
 <section class="stage">
   <canvas id="m" width="880" height="880" aria-label="Glyph Matrix"></canvas>
   <canvas id="spec" width="880" height="140" aria-hidden="true"></canvas>
@@ -45,7 +45,7 @@ audio{width:100%}
     <div class="row">
       <button class="primary" id="demo">Demo ritim</button>
       <button id="tab">Sekme sesi</button>
-      <button id="mic">Mikrofon</button>
+      <button id="mic">Mikrofon (konuş)</button>
       <button id="stop">Durdur</button>
     </div>
   </div>
@@ -65,31 +65,30 @@ audio{width:100%}
 </section>
 </main>
 <script>
-// 1:1 with MusicVisualizer.analyse + Effects.AudioBars.render (OpenGlyph), plus knobs.
+// 1:1 with MusicVisualizer (waveform peaks per slice) + effects.VoiceWave (OpenGlyph), plus knobs.
 const ROWS=[7,11,15,17,19,21,21,23,23,25,25,25,25,25,25,25,23,23,21,21,19,17,15,11,7];
 const EXISTS=new Uint8Array(625);for(let y=0;y<25;y++){const s=(25-ROWS[y])>>1;for(let x=s;x<s+ROWS[y];x++)EXISTS[y*25+x]=1;}
-const DEF={captureSize:1024,frameMs:16,fMin:200,fMax:2000,bandMode:0,symmetric:1,release:0.48,attack:1,gainTarget:0.47,gainSpeed:0.05,gainFloor:0,tipDim:0.24,byteScale:4,staleMs:400};
+const DEF={frameMs:40,windowMs:6,span:10,maxH:7,flat:5,taperEnd:9,gate:0.015,gainTarget:0.6,gainSpeed:0.06,gainMax:40,curve:1.5,alternate:1,staleMs:400};
 const SPEC=[
- ['captureSize','FFT boyutu (Visualizer capture)',[128,1024,128],'Android sınırı 1024'],
- ['frameMs','Kare aralığı ms',[16,100,1]],
- ['fMin','En düşük frekans Hz',[20,200,1]],
- ['fMax','En yüksek frekans Hz',[2000,20000,100]],
- ['symmetric','Simetrik (bas ortada, iki yana aynalı)',[0,1,1]],
- ['bandMode','Bant birleştirme (0=max 1=ortalama)',[0,1,1]],
- ['attack','Yükselme (1=anında)',[0.05,1,0.01]],
- ['release','Düşüş (yüksek=yavaş)',[0,0.98,0.01]],
+ ['frameMs','Dilim (sütun) süresi ms',[16,100,1]],
+ ['windowMs','Ölçüm penceresi ms (kısa = sivri)',[1,40,0.5]],
+ ['span','Yarı genişlik (sütun)',[6,12,1]],
+ ['maxH','En yüksek çizgi (satır)',[3,12,1]],
+ ['flat','Tam boy bölge (sütun)',[0,10,1]],
+ ['taperEnd','Çizgiye inme noktası',[1,12,1]],
+ ['gate','Sessizlik eşiği',[0,0.1,0.001]],
  ['gainTarget','Hedef yükseklik',[0.3,1.5,0.01]],
  ['gainSpeed','Otomatik kazanç hızı',[0,0.3,0.005]],
- ['gainFloor','Sessizlik eşiği',[0,0.5,0.01]],
- ['tipDim','Uç kararması',[0,1,0.01]],
- ['byteScale','FFT bayt ölçeği',[0.1,4,0.05]],
+ ['gainMax','En fazla kazanç',[1,80,1]],
+ ['curve','Sıkıştırma (1=doğrusal)',[0.3,1.5,0.01]],
+ ['alternate','Sol/sağ farklı (0=ayna)',[0,1,1]],
 ];
-let P={...DEF};try{Object.assign(P,JSON.parse(localStorage.getItem('og-vis')||'{}'))}catch(e){}
+let P={...DEF};try{Object.assign(P,JSON.parse(localStorage.getItem('og-wave')||'{}'))}catch(e){}
 const sl=document.getElementById('sliders'),js=document.getElementById('json');
 function buildSliders(){sl.innerHTML='';for(const [k,t,[a,b,s]] of SPEC){const d=document.createElement('div');d.className='sl';
   d.innerHTML=`<span>${t}</span><output>${P[k]}</output><input type="range" min="${a}" max="${b}" step="${s}" value="${P[k]}">`;
   const i=d.querySelector('input'),o=d.querySelector('output');i.oninput=()=>{P[k]=+i.value;o.textContent=P[k];save();};sl.appendChild(d);}save();}
-function save(){js.value=JSON.stringify(P,null,1);try{localStorage.setItem('og-vis',JSON.stringify(P))}catch(e){}}
+function save(){js.value=JSON.stringify(P,null,1);try{localStorage.setItem('og-wave',JSON.stringify(P))}catch(e){}}
 js.oninput=()=>{try{Object.assign(P,JSON.parse(js.value));buildSliders();}catch(e){}};
 document.getElementById('reset').onclick=()=>{P={...DEF};buildSliders();};
 document.getElementById('copy').onclick=()=>navigator.clipboard.writeText(js.value);
@@ -135,33 +134,25 @@ document.getElementById('demo').onclick=async()=>{stopAll();ctx();await ac.resum
   sched();demoTimer=setInterval(sched,50);info('Demo ritim 118 BPM');};
 function info(t){document.getElementById('info').textContent=t;}
 
-// ---- Android Visualizer emulation: 8-bit waveform -> FFT bytes (re/im, int8) ----
-function fftBytes(N){
-  const buf=new Float32Array(an.fftSize);an.getFloatTimeDomainData(buf);
-  const re=new Float64Array(N),im=new Float64Array(N);
-  for(let i=0;i<N;i++)re[i]=Math.max(-128,Math.min(127,Math.round(buf[buf.length-N+i]*128))); // 8-bit, as played
-  for(let i=1,j=0;i<N;i++){let b=N>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];}}
-  for(let len=2;len<=N;len<<=1){const a=-2*Math.PI/len;for(let i=0;i<N;i+=len)for(let k=0;k<len/2;k++){
-    const c=Math.cos(a*k),s=Math.sin(a*k),xr=re[i+k+len/2]*c-im[i+k+len/2]*s,xi=re[i+k+len/2]*s+im[i+k+len/2]*c;
-    re[i+k+len/2]=re[i+k]-xr;im[i+k+len/2]=im[i+k]-xi;re[i+k]+=xr;im[i+k]+=xi;}}
-  const out=new Int8Array(N),sc=2/N*P.byteScale;
-  for(let i=0;i<N/2;i++){out[2*i]=Math.max(-128,Math.min(127,Math.round(re[i]*sc)));out[2*i+1]=Math.max(-128,Math.min(127,Math.round(im[i]*sc)));}
-  return out;
-}
-const levels=new Float32Array(25),outL=new Float32Array(25);let BANDS=25;let gain=1/40,lastUpd=-1e9,lastLoud=0;
-function analyse(fft,sr){BANDS=P.symmetric?13:25;const bins=fft.length/2,binHz=sr/2/bins;let loudest=0;
-  for(let b=0;b<BANDS;b++){const f0=P.fMin*Math.pow(P.fMax/P.fMin,b/BANDS),f1=P.fMin*Math.pow(P.fMax/P.fMin,(b+1)/BANDS);
-    const i0=Math.max(1,Math.floor(f0/binHz)),i1=Math.max(i0+1,Math.floor(f1/binHz));let sum=0,n=0;
-    for(let i=i0;i<i1&&i<bins;i++){const m=Math.hypot(fft[2*i],fft[2*i+1]);if(P.bandMode)sum+=m;else sum=Math.max(sum,m);n++;}
-    if(P.bandMode&&n)sum/=n;
-    const level=Math.log10(1+sum);loudest=Math.max(loudest,level);const target=level*gain*40;
-    levels[b]=target>levels[b]?levels[b]+(target-levels[b])*P.attack:levels[b]*P.release+target*(1-P.release);
-    outL[b]=Math.min(1,levels[b]);}
-  if(loudest>P.gainFloor)gain+=((P.gainTarget/40/loudest)-gain)*P.gainSpeed;lastLoud=loudest;}
+// ---- VoiceWave emulation ----
+const S_MAX=12;const L={u:new Float32Array(S_MAX+1),d:new Float32Array(S_MAX+1)},R={u:new Float32Array(S_MAX+1),d:new Float32Array(S_MAX+1)};
+let cu=0,cd=0,nextLeft=true,gain=4,lastUpd=-1e9,lastPeak=0;
+function level(v){return v<=P.gate?0:Math.min(1,Math.pow(v*gain,P.curve));}
+function push(pos,neg){const peak=Math.max(pos,neg);lastPeak=peak;
+  if(peak>P.gate)gain+=(Math.min(P.gainMax,P.gainTarget/peak)-gain)*P.gainSpeed;
+  const up=level(pos),dn=level(neg),side=(nextLeft||!P.alternate)?L:R;
+  for(const sd of (P.alternate?[side]:[L,R])){sd.u.copyWithin(2,1,S_MAX);sd.d.copyWithin(2,1,S_MAX);sd.u[1]=cu;sd.d[1]=cd;}
+  cu=up;cd=dn;nextLeft=!nextLeft;}
+function slice(){ // Visualizer.getWaveForm: latest 1024 samples as 8-bit
+  const buf=new Float32Array(an.fftSize);an.getFloatTimeDomainData(buf);let mx=0,mn=0;
+  const n=Math.max(8,Math.round(P.windowMs/1000*ac.sampleRate));for(let i=buf.length-n;i<buf.length;i++){const v=Math.round(buf[i]*128)/128;if(v>mx)mx=v;if(v<mn)mn=v;}
+  push(mx,-mn);}
+function taper(k){if(k<=P.flat)return 1;if(k>=P.taperEnd)return 0;const t=(k-P.flat)/(P.taperEnd-P.flat);return .5+.5*Math.cos(Math.PI*t);}
 function render(){const g=new Float32Array(625);
-  for(let x=0;x<25;x++){const half=(ROWS[x]-1)>>1,lv=outL[P.symmetric?Math.abs(x-12):x],h=Math.round(Math.max(0,Math.min(1,lv))*half);
-    for(let dy=-h;dy<=h;dy++){const fall=h===0?1:1-P.tipDim*Math.abs(dy)/h;g[(12+dy)*25+x]=fall;}}return g;}
-
+  const st=(x,u,d,w)=>{g[12*25+x]=1;const hu=Math.round(u*w*P.maxH),hd=Math.round(d*w*P.maxH);
+    for(let dy=1;dy<=hu;dy++)g[(12-dy)*25+x]=1;for(let dy=1;dy<=hd;dy++)g[(12+dy)*25+x]=1;};
+  for(let k=0;k<=P.span;k++){const w=taper(k);if(k===0)st(12,cu,cd,w);else{st(12-k,L.u[k],L.d[k],w);st(12+k,R.u[k],R.d[k],w);}}
+  return g;}
 const cv=document.getElementById('m'),c2=cv.getContext('2d'),sp=document.getElementById('spec'),s2=sp.getContext('2d');
 function drawMatrix(g){const S=cv.width,cell=S*0.88/25,o=(S-cell*25)/2;
   c2.clearRect(0,0,S,S);c2.fillStyle='#000';c2.beginPath();c2.arc(S/2,S/2,S/2,0,7);c2.fill();
@@ -169,14 +160,14 @@ function drawMatrix(g){const S=cv.width,cell=S*0.88/25,o=(S-cell*25)/2;
     const v=g[k],c=v>0?Math.round(31+224*Math.pow(v,0.6)):28;
     c2.fillStyle=`rgb(${c},${c},${c})`;c2.beginPath();c2.arc(o+(x+.5)*cell,o+(y+.5)*cell,cell*.37,0,7);c2.fill();}}
 function drawSpec(){const W=sp.width,H=sp.height;s2.clearRect(0,0,W,H);s2.fillStyle=getComputedStyle(document.body).color;
-  const w=W/BANDS;for(let b=0;b<BANDS;b++){const h=outL[b]*H;s2.globalAlpha=.25;s2.fillRect(b*w+2,H-Math.min(H,levels[b]*H),w-4,2);s2.globalAlpha=.8;s2.fillRect(b*w+2,H-h,w-4,h);}s2.globalAlpha=1;}
+  const buf=an?new Float32Array(an.fftSize):null;if(!buf)return;an.getFloatTimeDomainData(buf);s2.globalAlpha=.7;
+  for(let x=0;x<W;x++){const v=buf[Math.floor(x/W*buf.length)];s2.fillRect(x,H/2-v*H/2,1,Math.max(1,v*H));}s2.globalAlpha=1;}
 let next=0;
 function loop(now){requestAnimationFrame(loop);if(now<next)return;next=now+P.frameMs;
-  if(src&&an){const N=Math.min(P.captureSize,an.fftSize);analyse(fftBytes(N),ac.sampleRate);lastUpd=now;
-    document.getElementById('info').dataset.k=1;}
-  const active=now-lastUpd<P.staleMs;if(!active)outL.fill(0);
-  drawMatrix(render());drawSpec();
-  if(src)document.getElementById('info').title=`gain ${(gain*40).toFixed(3)} · loudest ${lastLoud.toFixed(2)}`;}
+  if(src&&an){slice();lastUpd=now;}
+  const active=now-lastUpd<P.staleMs;
+  drawMatrix(active?render():new Float32Array(625));drawSpec();
+  if(src)document.getElementById('info').title=`gain ${gain.toFixed(2)} · peak ${lastPeak.toFixed(3)}`;}
 drawMatrix(new Float32Array(625));requestAnimationFrame(loop);
 </script>
 </body>

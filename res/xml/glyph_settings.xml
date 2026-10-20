@@ -101,6 +101,14 @@
             app:tileSwitch="true" />
 
         <org.openglyph.TilePreference
+            android:key="open_glyph_call_voice"
+            android:title="@string/settings_call_voice"
+            android:summary="@string/settings_call_voice_short"
+            android:icon="@drawable/ic_og_call"
+            app:tileHalf="true"
+            app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
             android:key="open_glyph_progress"
             android:title="@string/settings_progress"
             android:summary="@string/settings_progress_short"

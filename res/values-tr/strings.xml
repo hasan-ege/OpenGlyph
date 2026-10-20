@@ -168,8 +168,10 @@
     <string name="toy_fly_summary">Uzun bas, sonra 30 saniyede olabildiğince çok yemek için eğ</string>
     <string name="toy_off">Kapalı</string>
     <string name="toy_off_summary">Matrisi kapatır. Hep en sonda; taşınamaz ve kaldırılamaz</string>
+    <string name="settings_call_voice">Arama sesi</string>
+    <string name="settings_call_voice_short">Karşıdakinin sesi dalga olarak</string>
     <string name="settings_music">Müzik görselleştirme</string>
-    <string name="settings_music_short">Hoparlör sesine göre çubuklar</string>
+    <string name="settings_music_short">Hoparlör sesinin dalga formu</string>
     <string name="pattern_generative">Üretken</string>
     <string name="settings_generative_category">Üretken</string>
     <string name="settings_generative_sounds">Üretken bildirim sesleri</string>

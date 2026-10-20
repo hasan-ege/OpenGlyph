@@ -457,14 +457,28 @@ public final class HostTests {
         pulse.trigger(0, wa);
         check(pulse.isActive(wa.durationMs() - 1) && !pulse.isActive(wa.durationMs() + 1),
                 "generative pulse lasts as long as its sound");
-        Effects.AudioBars bars = new Effects.AudioBars();
-        float[] lv = new float[25];
-        for (int i = 0; i < 25; i++) lv[i] = i / 24f;
-        bars.setLevels(lv, 0);
-        Frame bf = new Frame();
-        bars.render(bf, 10);
-        check(bars.isActive(100) && !bars.isActive(1000) && bf.get(12, 12) > 0 && bf.get(24, 12) > 0
-                && bf.get(0, 13) == 0 && bf.get(22, 7) > 0, "music bars: per-column height, quiet when stale");
+        org.openglyph.effects.VoiceWave wave = new org.openglyph.effects.VoiceWave(Effect.PRIORITY_MUSIC);
+        Frame vf = new Frame();
+        wave.push(0, 0, 0);
+        wave.render(vf, 0);
+        boolean line = true;
+        for (int x = 2; x <= 22; x++) line &= vf.get(x, 12) == Frame.MAX && vf.get(x, 11) == 0 && vf.get(x, 13) == 0;
+        check(line && vf.get(1, 12) == 0 && vf.get(23, 12) == 0, "voice wave: silence is a flat line, columns 2..22");
+        for (int i = 0; i < 40; i++) wave.push(0.3f + 0.2f * (i % 3), 0.25f + 0.15f * (i % 2), 40 * i);
+        vf.clear();
+        wave.render(vf, 40 * 39);
+        int hc = 0, he = 0;
+        for (int y = 0; y < 25; y++) { if (vf.get(12, y) > 0) hc++; if (vf.get(21, y) > 0) he++; }
+        boolean sides = false, uniform = true;
+        for (int y = 0; y < 25; y++) for (int x = 0; x < 25; x++) {
+            int v = vf.get(x, y);
+            if (v != 0 && v != Frame.MAX) uniform = false;
+            if (vf.get(x, y) != vf.get(24 - x, y)) sides = true;
+        }
+        check(hc >= 6 && he == 1, "voice wave: tall strokes in the middle, the bare line at the ends");
+        check(uniform, "voice wave: every lit pixel at full brightness");
+        check(sides, "voice wave: the two halves are not mirror copies");
+        check(wave.isActive(40 * 39 + 100) && !wave.isActive(40 * 39 + 1000), "voice wave: goes quiet when stale");
     }
 
     static void timerLed() throws Exception {

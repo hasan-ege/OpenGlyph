@@ -248,49 +248,4 @@ public final class Effects {
             return -1;
         }
     }
-
-    /**
-     * Music visualisation: 25 bars, one per column, mirrored about the middle row like a
-     * waveform. Levels come from the speaker output; the layer goes quiet when they stop.
-     */
-    public static final class AudioBars implements Effect {
-        static final long STALE_MS = 400;
-        private final float[] levels = new float[MatrixLayout.WIDTH];
-        private volatile long updatedMs = Long.MIN_VALUE;
-
-        /** Levels 0..1, one per column (left to right as seen on the matrix). */
-        public void setLevels(float[] in, long nowMs) {
-            synchronized (levels) {
-                for (int i = 0; i < levels.length && i < in.length; i++) {
-                    levels[i] = Math.max(0, Math.min(1, in[i]));
-                }
-            }
-            updatedMs = nowMs;
-        }
-
-        public void stop() {
-            updatedMs = Long.MIN_VALUE;
-        }
-
-        @Override public int priority() { return PRIORITY_MUSIC; }
-
-        @Override public boolean isActive(long now) {
-            return updatedMs != Long.MIN_VALUE && now - updatedMs < STALE_MS;
-        }
-
-        @Override public long render(Frame f, long now) {
-            synchronized (levels) {
-                for (int x = 0; x < MatrixLayout.WIDTH; x++) {
-                    int half = (MatrixLayout.columnLength(x) - 1) / 2;
-                    int h = Math.round(levels[x] * half);
-                    for (int dy = -h; dy <= h; dy++) {
-                        // Brightest at the centre line, dimmer towards the tips.
-                        double fall = h == 0 ? 1 : 1 - 0.24 * Math.abs(dy) / (double) h;
-                        f.set(x, 12 + dy, (int) (Frame.MAX * fall));
-                    }
-                }
-            }
-            return 16;
-        }
-    }
 }

@@ -48,6 +48,8 @@ final class GlyphSettings {
     static final String GEN_RINGTONE = "open_glyph_generative_ringtone"; // 1/0, default 0
     static final String SEED = "open_glyph_seed";                    // text, random per device
     static final String ENGINE = "open_glyph_engine";                // DIODE|CHEMICAL
+    /** During a call, the other person's voice as a waveform. */
+    static final String CALL_VOICE = "open_glyph_call_voice";        // 1/0, default 1
     static final String CLOCK_FACE = "open_glyph_clock_face";        // 0..Clock.FACES-1, default 0
     /** Glyph Toys timeout in ms, one of ToyHost.TIMEOUTS_MS (the stock choices). */
     static final String TOY_TIMEOUT = "open_glyph_toy_timeout";      // default ToyHost.IDLE_MS
@@ -56,7 +58,7 @@ final class GlyphSettings {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
         AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, GEN_RINGTONE, FLIP_MODE, POCKET, AUTO_BRIGHTNESS, PROGRESS, ENGINE, SEED,
-        CLOCK_FACE, TOY_TIMEOUT,
+        CLOCK_FACE, TOY_TIMEOUT, CALL_VOICE,
     };
 
     private GlyphSettings() {}
