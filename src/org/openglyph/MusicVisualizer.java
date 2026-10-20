@@ -18,11 +18,15 @@ import org.openglyph.effects.SpectrumBars;
 import org.openglyph.effects.VoiceWave;
 
 /**
- * Music visualisation: while media plays through the phone's own speaker, the output mix is
+ * Music visualisation: while media plays (speaker, headphones, USB or Bluetooth alike), the output mix is
  * captured (audio effect "Visualizer" on session 0, normalised waveform) and drawn in one of two
  * modes: Moving ({@link VoiceWave}, every {@link #FRAME_MS} the latest slice's peaks become one
  * stroke) or Fixed ({@link SpectrumBars}, every {@link #FIXED_FRAME_MS} a Hann-windowed FFT of the
  * waveform, bands from {@link Spectrum#bands}).
+ *
+ * The picture does not depend on the volume setting: the waveform is captured normalised and
+ * scaled back to the content's own level (the measured output peak minus the media volume in
+ * dB), so volume 10 and volume 100 look the same. At volume 0 or muted it stays off.
  * Headphones, Bluetooth and calls leave the matrix alone (calls have their own source).
  */
 final class MusicVisualizer {
@@ -67,12 +71,44 @@ final class MusicVisualizer {
         mEnabled = on;
         if (on) {
             mAudio.registerAudioPlaybackCallback(mPlayback, mHandler);
+            mAudio.registerAudioDeviceCallback(mDevices, mHandler);
+            mContext.registerReceiver(mVolumeReceiver,
+                    new android.content.IntentFilter(VOLUME_CHANGED_ACTION), null, mHandler);
             update();
         } else {
             mAudio.unregisterAudioPlaybackCallback(mPlayback);
+            mAudio.unregisterAudioDeviceCallback(mDevices);
+            mContext.unregisterReceiver(mVolumeReceiver);
             stopCapture();
         }
     }
+
+    /** AudioManager's (hidden) broadcast for any stream volume change. */
+    private static final String VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION";
+
+    private final android.content.BroadcastReceiver mVolumeReceiver =
+            new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, android.content.Intent intent) {
+            update();
+        }
+    };
+
+    /** Headphones / Bluetooth coming and going change the output and its volume curve. */
+    private final android.media.AudioDeviceCallback mDevices = new android.media.AudioDeviceCallback() {
+        @Override
+        public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
+            update();
+        }
+
+        @Override
+        public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) {
+            update();
+        }
+    };
+
+    /** Media volume of the current output in dB (0 = full scale, negative below). */
+    private volatile float mVolumeDb;
 
     private final AudioManager.AudioPlaybackCallback mPlayback =
             new AudioManager.AudioPlaybackCallback() {
@@ -82,7 +118,8 @@ final class MusicVisualizer {
         }
     };
 
-    private boolean mediaOnSpeaker() {
+    /** Media or game audio is playing, outside a call, at a volume above 0. */
+    private boolean mediaAudible() {
         boolean playing = false;
         for (AudioPlaybackConfiguration c : mAudio.getActivePlaybackConfigurations()) {
             int usage = c.getAudioAttributes().getUsage();
@@ -92,20 +129,33 @@ final class MusicVisualizer {
             }
         }
         if (!playing || mAudio.getMode() != AudioManager.MODE_NORMAL) return false;
+        int index = mAudio.getStreamVolume(AudioManager.STREAM_MUSIC);
+        return index > 0 && !mAudio.isStreamMute(AudioManager.STREAM_MUSIC);
+    }
+
+    private int outputType() {
         try {
             AudioAttributes media = new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_MEDIA).build();
-            for (AudioDeviceAttributes d : mAudio.getDevicesForAttributes(media)) {
-                if (d.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) return true;
-            }
-            return false;
-        } catch (SecurityException e) {
-            return !mAudio.isWiredHeadsetOn() && !mAudio.isBluetoothA2dpOn();
+            for (AudioDeviceAttributes d : mAudio.getDevicesForAttributes(media)) return d.getType();
+        } catch (RuntimeException ignored) {
         }
+        return AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
+    }
+
+    private void readVolume() {
+        try {
+            mVolumeDb = mAudio.getStreamVolumeDb(AudioManager.STREAM_MUSIC,
+                    mAudio.getStreamVolume(AudioManager.STREAM_MUSIC), outputType());
+        } catch (RuntimeException e) {
+            mVolumeDb = 0; // unknown curve (e.g. absolute-volume Bluetooth): treat as full scale
+        }
+        if (Float.isNaN(mVolumeDb) || Float.isInfinite(mVolumeDb)) mVolumeDb = 0;
     }
 
     private void update() {
-        if (mEnabled && mediaOnSpeaker()) startCapture(); else stopCapture();
+        readVolume();
+        if (mEnabled && mediaAudible()) startCapture(); else stopCapture();
     }
 
     private void startCapture() {
@@ -116,6 +166,8 @@ final class MusicVisualizer {
             v.setCaptureSize(Math.min(range[1], 1024));
             // Normalised: the wave keeps its size at any volume (8-bit samples are coarse when quiet).
             v.setScalingMode(Visualizer.SCALING_MODE_NORMALIZED);
+            // Peak level of the output, to scale the normalised wave back to the content's level.
+            v.setMeasurementMode(Visualizer.MEASUREMENT_MODE_PEAK_RMS);
             v.setEnabled(true);
             mVisualizer = v;
             mWaveform = new byte[v.getCaptureSize()];
@@ -146,12 +198,28 @@ final class MusicVisualizer {
             if (v == null) return;
             boolean fixed = mFixed;
             if (v.getWaveForm(mWaveform) == Visualizer.SUCCESS) {
+                mScale = contentScale(v);
                 if (fixed) fixedFrame(v); else movingFrame(v);
                 mInvalidate.run();
             }
             mHandler.postDelayed(this, fixed ? FIXED_FRAME_MS : FRAME_MS);
         }
     };
+
+    private final Visualizer.MeasurementPeakRms mPeakRms = new Visualizer.MeasurementPeakRms();
+    /** Normalised samples times this = the content's own level, whatever the volume. */
+    private float mScale = 1;
+
+    /** Measured output peak (mB, after the volume) minus the volume (dB) = the content's peak. */
+    private float contentScale(Visualizer v) {
+        try {
+            if (v.getMeasurementPeakRms(mPeakRms) != Visualizer.SUCCESS) return 1;
+        } catch (RuntimeException e) {
+            return 1;
+        }
+        double contentDb = mPeakRms.mPeak / 100.0 - mVolumeDb;
+        return (float) Math.min(1, Math.pow(10, contentDb / 20));
+    }
 
     /** The last WINDOW_MS: positive and negative peaks (8-bit unsigned, 128 = silence). */
     private void movingFrame(Visualizer v) {
@@ -163,7 +231,8 @@ final class MusicVisualizer {
             if (s > max) max = s;
             if (s < min) min = s;
         }
-        mWave.push((max - 128) / 127f, (128 - min) / 128f, SystemClock.uptimeMillis());
+        mWave.push((max - 128) / 127f * mScale, (128 - min) / 128f * mScale,
+                SystemClock.uptimeMillis());
     }
 
     private void fixedFrame(Visualizer v) {
@@ -173,7 +242,7 @@ final class MusicVisualizer {
             mMag = new float[n / 2 + 1];
         }
         int off = mWaveform.length - n;
-        for (int i = 0; i < n; i++) mSamples[i] = ((mWaveform[off + i] & 0xff) - 128) / 128f;
+        for (int i = 0; i < n; i++) mSamples[i] = ((mWaveform[off + i] & 0xff) - 128) / 128f * mScale;
         Spectrum.magnitudes(mSamples, 0, n, mMag);
         double binHz = v.getSamplingRate() / 1000.0 / n;
         Spectrum.bands(mMag, n / 2 + 1, binHz, SpectrumBars.F_MIN, SpectrumBars.F_MAX, mBands);

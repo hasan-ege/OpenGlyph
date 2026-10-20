@@ -184,7 +184,7 @@
     <string name="settings_vis_fixed_short">Fixed · a column per frequency</string>
     <string name="settings_vis_moving_short">Moving · a scrolling sound wave</string>
     <string name="settings_music">Music visualisation</string>
-    <string name="settings_music_short">Waveform of the speaker\'s sound</string>
+    <string name="settings_music_short">Music as light, on any output</string>
     <string name="pattern_generative">Generative</string>
     <string name="settings_generative_category">Generative</string>
     <string name="settings_generative_sounds">Generative notification sounds</string>

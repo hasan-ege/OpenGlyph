@@ -174,7 +174,7 @@
     <string name="settings_vis_fixed_short">Sabit · her sütun bir frekans</string>
     <string name="settings_vis_moving_short">Hareketli · kayan ses dalgası</string>
     <string name="settings_music">Müzik görselleştirme</string>
-    <string name="settings_music_short">Hoparlör sesinin dalga formu</string>
+    <string name="settings_music_short">Müzik ışık olarak, her çıkışta</string>
     <string name="pattern_generative">Üretken</string>
     <string name="settings_generative_category">Üretken</string>
     <string name="settings_generative_sounds">Üretken bildirim sesleri</string>
