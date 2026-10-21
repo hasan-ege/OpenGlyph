@@ -26,8 +26,7 @@ public final class GlyphSettingsFragment extends GlyphFragment {
     /** Tile switches that map 1:1 to a flag (default on). */
     private static final String[] FLAGS = {
         GlyphSettings.TOYS, GlyphSettings.NOTIFICATIONS, GlyphSettings.CALLS,
-        GlyphSettings.CHARGING, GlyphSettings.RECORD_LED, GlyphSettings.PROGRESS,
-        GlyphSettings.CALL_VOICE,
+        GlyphSettings.CHARGING, GlyphSettings.RECORD_LED,
     };
 
     @Override
@@ -58,23 +57,6 @@ public final class GlyphSettingsFragment extends GlyphFragment {
         }
         tile(GlyphSettings.FLIP).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP),
                 (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.FLIP, on));
-        tile(GlyphSettings.MUSIC).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.MUSIC),
-                (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.MUSIC, on));
-        // The music tile's body picks the visualiser mode; its switch turns it on or off.
-        tile(GlyphSettings.MUSIC).setOnPreferenceClickListener(p -> {
-            String[] values = {"FIXED", "MOVING"};
-            int checked = GlyphSettings.visualizerFixed(cr) ? 0 : 1;
-            new android.app.AlertDialog.Builder(requireContext())
-                    .setTitle(R.string.settings_vis_mode)
-                    .setSingleChoiceItems(R.array.vis_mode_entries, checked, (d, which) -> {
-                        Settings.Secure.putString(cr, GlyphSettings.VIS_MODE, values[which]);
-                        refresh();
-                        d.dismiss();
-                    })
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
-            return true;
-        });
         tile(GlyphSettings.POCKET).setSwitch(GlyphSettings.flagDefaultOff(cr, GlyphSettings.POCKET),
                 (t, on) -> GlyphSettings.setFlag(cr, GlyphSettings.POCKET, on));
         // Tapping Flip to Glyph picks what face down does: silent or vibrate.
@@ -118,6 +100,7 @@ public final class GlyphSettingsFragment extends GlyphFragment {
         });
 
         link(GlyphSettings.TOYS, ToysFragment::new);
+        link("automations", AutomationFragment::new);
         link(GlyphSettings.NOTIFICATIONS, NotificationsFragment::new);
         link("essential", EssentialFragment::new);
         link(GlyphSettings.AOD, AodToyFragment::new);
@@ -144,9 +127,13 @@ public final class GlyphSettingsFragment extends GlyphFragment {
                 .setValue(GlyphSettings.brightness(cr));
         for (String key : FLAGS) tile(key).setChecked(GlyphSettings.flag(cr, key));
         tile(GlyphSettings.FLIP).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP));
-        tile(GlyphSettings.MUSIC).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.MUSIC));
-        tile(GlyphSettings.MUSIC).setSummary(GlyphSettings.visualizerFixed(cr)
-                ? R.string.settings_vis_fixed_short : R.string.settings_vis_moving_short);
+        int autos = 0;
+        for (org.openglyph.core.Automation.Rule r : org.openglyph.core.Automation.parse(
+                GlyphSettings.string(cr, GlyphSettings.AUTOMATIONS, null))) {
+            if (r.enabled) autos++;
+        }
+        tile("automations").setSummary(c.getResources().getQuantityString(
+                R.plurals.automation_rules, autos, autos));
         tile(GlyphSettings.POCKET).setChecked(GlyphSettings.flagDefaultOff(cr, GlyphSettings.POCKET));
         tile(GlyphSettings.FLIP).setSummary("VIBRATE".equals(
                 GlyphSettings.string(cr, GlyphSettings.FLIP_MODE, "SILENT"))

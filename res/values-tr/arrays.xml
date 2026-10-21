@@ -21,4 +21,16 @@
         <item>Sabit: her sütun bir frekans</item>
         <item>Hareketli: kayan ses dalgası</item>
     </string-array>
+    <!-- Automation conditions, in the order of core/Automation.Cond -->
+    <string-array name="automation_cond_entries">
+        <item>Ses çalıyor</item>
+        <item>Zamanlayıcı çalışıyor</item>
+        <item>Live Update var</item>
+        <item>Arama sürüyor</item>
+        <item>Şarj oluyor</item>
+        <item>Yüzüstü duruyor</item>
+        <item>Ekran kapalı</item>
+        <item>Ekran açık</item>
+        <item>Kulaklık takılı</item>
+    </string-array>
 </resources>

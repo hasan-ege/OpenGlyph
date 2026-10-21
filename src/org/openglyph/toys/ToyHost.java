@@ -18,10 +18,13 @@ import org.openglyph.core.Frame;
  *   for every toy, 15 s to 30 min), or for as long as it keeps the screen on.
  * - As the stock host, toys also go off on unlock and when the matrix is laid face down
  *   ({@link #hide()}); a short press always brings them back.
+ * - Automations: while no toy picked with the button is on screen, the automation toy
+ *   ({@link #setAuto}, from the first matching rule) is shown, for as long as its rule holds.
+ *   The toy on the matrix, picked or automatic, is the one told onSelected / onDeselected.
  */
 public final class ToyHost implements Effect {
-    /** Default Glyph Toys timeout (the shortest of the stock choices). */
-    public static final long IDLE_MS = 15000;
+    /** Default Glyph Toys timeout. */
+    public static final long IDLE_MS = 30000;
     /** The stock "Glyph Toys timeout" choices. */
     public static final long[] TIMEOUTS_MS = {15000, 30000, 60000, 120000, 300000, 600000, 1800000};
 
@@ -32,6 +35,9 @@ public final class ToyHost implements Effect {
     private Toy selected;
     private long visibleUntil = Long.MIN_VALUE;
     private long timeoutMs = IDLE_MS;
+    /** The automation's toy (null: none), and the toy on the matrix whose onSelected ran. */
+    private Toy auto, live;
+    private long lastNow;
 
     public ToyHost(Supplier<Toy.Context> context, Toy... toys) {
         this.context = context;
@@ -98,12 +104,41 @@ public final class ToyHost implements Effect {
         if (i >= 0) index = i;
         select(t);
         visibleUntil = now + timeoutOf(selected);
+        sync(now);
     }
 
     /** Keeps the position on the same toy where possible; drops a selection that went away. */
     private void reconcile(Toy current) {
         index = Math.max(0, enabled.indexOf(current));
         if (selected != null && !enabled.contains(selected)) select(null);
+        if (auto != null && !all.contains(auto)) auto = null;
+        sync(lastNow);
+    }
+
+    /** The automation's toy by id (any toy, enabled for the button or not), or null for none. */
+    public synchronized void setAuto(String id, long now) {
+        auto = id == null ? null : byId(id);
+        sync(now);
+    }
+
+    public synchronized Toy auto() {
+        return auto;
+    }
+
+    /** The toy on the matrix now: the picked one while it is visible, else the automation's. */
+    private Toy shown(long now) {
+        return isVisible(now) ? selected : auto;
+    }
+
+    /** Tells the toy that left the matrix and the one that arrived. */
+    private void sync(long now) {
+        lastNow = now;
+        Toy s = shown(now);
+        if (s == live) return;
+        Toy old = live;
+        live = s;
+        if (old != null) old.onDeselected();
+        if (s != null) s.onSelected();
     }
 
     public synchronized Toy current() {
@@ -119,12 +154,13 @@ public final class ToyHost implements Effect {
         if (selected != null && isVisible(now)) index = (index + 1) % enabled.size();
         select(current());
         visibleUntil = now + timeoutOf(selected);
+        sync(now);
     }
 
     public synchronized void onLongPress(long now) {
-        // A press that ran long while nothing is shown still means "show me a toy".
         if (selected == null || !isVisible(now)) {
-            onTap(now);
+            // Long press on an automation toy goes to it; with nothing shown it means "a toy".
+            if (auto != null) auto.onLongPress(now); else onTap(now);
             return;
         }
         selected.onLongPress(now);
@@ -132,30 +168,33 @@ public final class ToyHost implements Effect {
     }
 
     public synchronized void onButtonDown(long now) {
-        if (selected != null) selected.onButtonDown(now);
+        Toy s = shown(now);
+        if (s != null) s.onButtonDown(now);
     }
 
     public synchronized void onButtonUp(long now) {
-        if (selected != null) selected.onButtonUp(now);
+        Toy s = shown(now);
+        if (s != null) s.onButtonUp(now);
     }
 
-    /** Takes the toy off the matrix; it stays selected. */
+    /** Takes the picked toy off the matrix (an automation toy stays). */
     public synchronized void hide() {
         visibleUntil = Long.MIN_VALUE;
+        selected = null;
+        sync(lastNow);
     }
 
-    /** Deselects (e.g. toys switched off in Settings). */
+    /** Deselects everything (e.g. toys switched off in Settings). */
     public synchronized void deselect() {
-        select(null);
-        hide();
+        selected = null;
+        auto = null;
+        visibleUntil = Long.MIN_VALUE;
+        sync(lastNow);
     }
 
+    /** The picked toy; who hears onSelected is decided by {@link #sync}. */
     private void select(Toy t) {
-        if (t == selected) return;
-        Toy old = selected;
         selected = t;
-        if (old != null) old.onDeselected();
-        if (t != null) t.onSelected();
     }
 
     private boolean isVisible(long now) {
@@ -170,26 +209,31 @@ public final class ToyHost implements Effect {
 
     /** Toy.SENSOR_* flags the toy on screen needs now; 0 when nothing is shown. */
     public synchronized int neededSensors(long now) {
-        return isVisible(now) ? selected.sensors() : 0;
+        Toy s = shown(now);
+        return s == null ? 0 : s.sensors();
     }
 
     @Override public int priority() { return PRIORITY_TOY; }
 
     @Override public synchronized boolean isActive(long now) {
         boolean visible = isVisible(now);
-        // Nothing runs in the background: once off screen the toy is deselected (an SDK toy is
-        // unbound), and the next press starts the toy in turn afresh.
-        if (!visible && selected != null) select(null);
-        return visible;
+        // Nothing runs in the background: once off screen the picked toy is deselected (an SDK
+        // toy is unbound), and the next press starts the toy in turn afresh.
+        if (!visible && selected != null) selected = null;
+        sync(now);
+        return live != null;
     }
 
     @Override public synchronized long render(Frame f, long now) {
-        if (selected == null) return -1;
-        selected.render(f, now, context.get());
-        long interval = selected.frameIntervalMs();
+        sync(now);
+        Toy s = live;
+        if (s == null) return -1;
+        s.render(f, now, context.get());
+        long interval = s.frameIntervalMs();
+        if (s != selected) return interval; // an automation toy: no timeout
         long untilIdle = visibleUntil - now;
         // Wake up for the idle timeout even when the picture is static.
-        if (!selected.keepsScreenOn(now) && untilIdle > 0) {
+        if (!s.keepsScreenOn(now) && untilIdle > 0) {
             return interval < 0 ? untilIdle : Math.min(interval, untilIdle);
         }
         return interval;

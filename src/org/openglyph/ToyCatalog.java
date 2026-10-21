@@ -46,6 +46,10 @@ final class ToyCatalog {
         }
         GlyphService service = GlyphService.get();
         if (service != null) {
+            for (Toy t : service.serviceToys()) {
+                out.add(new Entry(t.id(), text(c, "toy_" + t.id()),
+                        text(c, "toy_" + t.id() + "_summary"), false, t, null));
+            }
             for (RemoteToy t : service.sdkToys()) {
                 out.add(new Entry(t.id(), t.label(), t.summary().isEmpty()
                         ? c.getString(R.string.toy_sdk_summary) : t.summary(),

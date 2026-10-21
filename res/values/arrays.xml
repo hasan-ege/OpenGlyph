@@ -73,4 +73,16 @@
         <item>Fixed: a column per frequency</item>
         <item>Moving: a scrolling sound wave</item>
     </string-array>
+    <!-- Automation conditions, in the order of core/Automation.Cond -->
+    <string-array name="automation_cond_entries">
+        <item>Sound is playing</item>
+        <item>A timer is running</item>
+        <item>A Live Update is showing</item>
+        <item>A call is connected</item>
+        <item>Charging</item>
+        <item>Lying face down</item>
+        <item>Screen is off</item>
+        <item>Screen is on</item>
+        <item>Headphones connected</item>
+    </string-array>
 </resources>

@@ -82,22 +82,50 @@ public final class GlyphService extends Service {
 
     /** The Clock timer changed (started, paused, +1 min, gone): redraw the hourglass. */
     void onTimerChanged() {
+        mHandler.post(this::evaluateAutomations);
         mRenderer.invalidate();
     }
 
     /** From the notification listener: the newest Live Update's progress, or -1 for none. */
     void onLiveProgress(int percent, boolean indeterminate) {
-        boolean on = GlyphSettings.flag(getContentResolver(), GlyphSettings.PROGRESS);
-        mProgress.set(on ? percent : -1, indeterminate);
+        mProgress.set(percent, indeterminate);
+        mHandler.post(this::evaluateAutomations);
         mRenderer.invalidate();
     }
     private Renderer mRenderer;
     private TelephonyManager mTelephony;
     private RecordingLedController mRecordLed;
     private AmbientController mAmbient;
-    private final ToyHost mToys = new ToyHost(this::toyContext,
-            Toys.all().toArray(new Toy[0]));
-    private static final int BUILT_IN_TOYS = Toys.all().size();
+    /**
+     * Toys made from live effects: the visualiser, the call voice, the hourglass and Glyph
+     * Progress. They are picked with the Glyph Button or put up by automations like any toy, and
+     * their audio capture runs only while they are on the matrix.
+     */
+    private final List<Toy> mServiceToys = List.of(
+            new org.openglyph.toys.EffectToy("visualizer",
+                    () -> this.mVisFixed ? this.mMusicBars : this.mMusicWave,
+                    () -> this.mHandler.post(() -> this.mMusic.setEnabled(true)),
+                    () -> this.mHandler.post(() -> this.mMusic.setEnabled(false))),
+            new org.openglyph.toys.EffectToy("callvoice",
+                    () -> this.mVisFixed ? this.mCallBars : this.mCallWave,
+                    () -> this.mHandler.post(() -> { this.mCallVoiceShown = true; updateCallVoice(); }),
+                    () -> this.mHandler.post(() -> { this.mCallVoiceShown = false; updateCallVoice(); })),
+            new org.openglyph.toys.Hourglass(),
+            new org.openglyph.toys.EffectToy("progress", () -> this.mProgress, null, null));
+    private volatile boolean mVisFixed = true, mCallVoiceShown;
+    private final ToyHost mToys = new ToyHost(this::toyContext, builtInToys());
+    private final int BUILT_IN_TOYS = Toys.all().size() + mServiceToys.size();
+
+    private Toy[] builtInToys() {
+        List<Toy> all = new ArrayList<>(Toys.all());
+        all.addAll(mServiceToys);
+        return all.toArray(new Toy[0]);
+    }
+
+    /** The service-made toys, for Settings (names, previews). */
+    List<Toy> serviceToys() {
+        return mServiceToys;
+    }
     private final org.openglyph.effects.VoiceWave mMusicWave =
             new org.openglyph.effects.VoiceWave(org.openglyph.core.Effect.PRIORITY_MUSIC);
     /** The other person's voice during a call, just above music. */
@@ -155,14 +183,9 @@ public final class GlyphService extends Service {
         mRenderer.add(mCharging);
         mRenderer.add(mCall);
         mRenderer.add(mCallerId);
-        mRenderer.add(mProgress);
         mRenderer.add(mCountdown);
         mRenderer.add(mToys);
         mRenderer.add(mIdle);
-        mRenderer.add(mMusicWave);
-        mRenderer.add(mCallWave);
-        mRenderer.add(mMusicBars);
-        mRenderer.add(mCallBars);
         mToySensors = new ToySensors(this, mHandler);
         mMirror = new MirrorCamera(this);
         mSounds = new GenerativeSounds(this);
@@ -173,6 +196,7 @@ public final class GlyphService extends Service {
         mAmbient = new AmbientController(this, mHandler, () -> mHandler.post(this::applyBrightness));
         // Pocket / auto brightness sensors only run while the matrix has something to show.
         mRenderer.setActiveListener(active -> mHandler.post(() -> mAmbient.setMatrixActive(active)));
+        GlyphSettings.migrateToysV3(getContentResolver());
         applySettings();
         for (String key : GlyphSettings.ALL) {
             getContentResolver().registerContentObserver(
@@ -181,6 +205,7 @@ public final class GlyphService extends Service {
 
         mRecordLed = new RecordingLedController(this, mHandler);
         mRecordLed.start();
+        mIdleController.setStateListener(() -> mHandler.post(this::evaluateAutomations));
         mIdleController.start();
         mToyBridge = new NothingToyBridge(this, mHandler, this::onSdkToysChanged);
         mToyBridge.start();
@@ -219,6 +244,12 @@ public final class GlyphService extends Service {
 
         AudioManager am = getSystemService(AudioManager.class);
         if (am != null) am.registerAudioPlaybackCallback(mPlaybackCallback, mHandler);
+        if (am != null) am.registerAudioDeviceCallback(mAutomationDevices, mHandler);
+        IntentFilter autoFilter = new IntentFilter();
+        autoFilter.addAction(Intent.ACTION_POWER_CONNECTED);
+        autoFilter.addAction(Intent.ACTION_POWER_DISCONNECTED);
+        autoFilter.addAction("android.media.VOLUME_CHANGED_ACTION");
+        registerReceiver(mAutomationReceiver, autoFilter, null, mHandler);
 
         mRenderer.start();
         sInstance = this;
@@ -231,6 +262,9 @@ public final class GlyphService extends Service {
         if (mTelephony != null) mTelephony.unregisterTelephonyCallback(mCallState);
         AudioManager am = getSystemService(AudioManager.class);
         if (am != null) am.unregisterAudioPlaybackCallback(mPlaybackCallback);
+        if (am != null) am.unregisterAudioDeviceCallback(mAutomationDevices);
+        unregisterReceiver(mAutomationReceiver);
+        mHandler.removeCallbacks(mAutomationTick);
         mHandler.removeCallbacks(mPendingTimeout);
         unregisterReceiver(mPowerReceiver);
         unregisterReceiver(mUnlockReceiver);
@@ -313,6 +347,7 @@ public final class GlyphService extends Service {
             }
             mPlaying.clear();
             mPlaying.addAll(playing);
+            evaluateAutomations();
             if (notification && mPendingTheme != null) {
                 mHandler.removeCallbacks(mPendingTimeout);
                 mHandler.postDelayed(mPendingTimeout, AUDIO_START_LATENCY_MS);
@@ -398,12 +433,6 @@ public final class GlyphService extends Service {
         if (mToys.byId("clock") instanceof Toys.Clock clock) clock.setFace(face);
         mIdle.setClockFace(face);
         if (mAmbient != null) mAmbient.update();
-        // A running Clock timer shows as the hourglass on its own while Glyph Progress is on.
-        if (GlyphSettings.flag(getContentResolver(), GlyphSettings.PROGRESS)) {
-            mRenderer.add(org.openglyph.toys.Hourglass.effect());
-        } else {
-            mRenderer.remove(org.openglyph.toys.Hourglass.effect());
-        }
         applyBrightness();
         mToys.setTimeoutMs(GlyphSettings.toyTimeoutMs(getContentResolver()));
         List<String> order = new ArrayList<>(GlyphSettings.activeToys(getContentResolver()));
@@ -415,10 +444,12 @@ public final class GlyphService extends Service {
         GlyphNotificationListener.refreshEssential();
         if (mRecordLed != null) mRecordLed.update();
         boolean fixed = GlyphSettings.visualizerFixed(getContentResolver());
+        mVisFixed = fixed;
         if (mMusic != null) mMusic.setFixed(fixed);
         if (mCallVoice != null) mCallVoice.setFixed(fixed);
-        if (mMusic != null) mMusic.setEnabled(GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.MUSIC));
-        updateCallVoice();
+        mAutomations = org.openglyph.core.Automation.parse(
+                GlyphSettings.string(getContentResolver(), GlyphSettings.AUTOMATIONS, null));
+        evaluateAutomations();
         boolean genSounds = GlyphSettings.flagDefaultOff(getContentResolver(), GlyphSettings.GEN_SOUNDS);
         String engine = GlyphSettings.string(getContentResolver(), GlyphSettings.ENGINE, "DIODE")
                 + "|" + GlyphSettings.string(getContentResolver(), GlyphSettings.SEED, "");
@@ -743,6 +774,7 @@ public final class GlyphService extends Service {
                     SystemClock.uptimeMillis());
             mCallStateNow = state;
             updateCallVoice();
+            evaluateAutomations();
             if (state == TelephonyManager.CALL_STATE_IDLE) mCallerId.hide();
             mRenderer.invalidate();
         }
@@ -750,13 +782,101 @@ public final class GlyphService extends Service {
 
     private final CallState mCallState = new CallState();
 
-    /** The caller's voice on the matrix while a call is connected (and the setting is on). */
+    /** The caller's voice is read only while its toy is on the matrix during a connected call. */
     private void updateCallVoice() {
         if (mCallVoice == null) return;
-        mCallVoice.setActive(mCallStateNow == TelephonyManager.CALL_STATE_OFFHOOK
-                && GlyphSettings.flag(getContentResolver(), GlyphSettings.ENABLED)
-                && GlyphSettings.flag(getContentResolver(), GlyphSettings.CALL_VOICE));
+        mCallVoice.setActive(mCallVoiceShown
+                && mCallStateNow == TelephonyManager.CALL_STATE_OFFHOOK
+                && GlyphSettings.flag(getContentResolver(), GlyphSettings.ENABLED));
     }
+
+    // ---- automations ----
+
+    private volatile List<org.openglyph.core.Automation.Rule> mAutomations = List.of();
+    private String mAutoToy;
+
+    /** What the phone is doing now, for the automation rules. */
+    private org.openglyph.core.Automation.State automationState() {
+        org.openglyph.core.Automation.State st = new org.openglyph.core.Automation.State();
+        st.timer = org.openglyph.toys.Hourglass.hasTimer();
+        st.progress = mProgress.isActive(SystemClock.uptimeMillis());
+        st.call = mCallStateNow == TelephonyManager.CALL_STATE_OFFHOOK;
+        BatteryManager bm = getSystemService(BatteryManager.class);
+        st.charging = bm != null && bm.isCharging();
+        st.screenOff = mIdleController != null && mIdleController.isScreenOff();
+        st.faceDown = mIdleController != null && mIdleController.isFaceDown();
+        Calendar now = Calendar.getInstance();
+        st.minuteOfDay = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        AudioManager am = getSystemService(AudioManager.class);
+        if (am != null) {
+            for (android.media.AudioDeviceInfo d : am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                switch (d.getType()) {
+                    case android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                            android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                            android.media.AudioDeviceInfo.TYPE_USB_HEADSET,
+                            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                            android.media.AudioDeviceInfo.TYPE_BLE_HEADSET -> st.headphones = true;
+                    default -> { }
+                }
+            }
+            // Sound: media or game playback, and a media volume above 0.
+            boolean audible = am.getStreamVolume(AudioManager.STREAM_MUSIC) > 0
+                    && !am.isStreamMute(AudioManager.STREAM_MUSIC);
+            if (audible) {
+                android.content.pm.PackageManager pm = getPackageManager();
+                for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
+                    int usage = c.getAudioAttributes().getUsage();
+                    if (!c.isActive() || (usage != AudioAttributes.USAGE_MEDIA
+                            && usage != AudioAttributes.USAGE_GAME)) continue;
+                    String[] pkgs = pm.getPackagesForUid(c.getClientUid());
+                    if (pkgs != null) for (String p : pkgs) st.soundApps.add(p);
+                    else st.soundApps.add("uid:" + c.getClientUid());
+                }
+            }
+        }
+        return st;
+    }
+
+    /** Puts the first matching rule's toy on the matrix (below a toy picked with the button). */
+    private void evaluateAutomations() {
+        List<org.openglyph.core.Automation.Rule> rules = mAutomations;
+        if (mIdleController != null) {
+            mIdleController.setAutomationFaceDown(org.openglyph.core.Automation.uses(rules,
+                    org.openglyph.core.Automation.Cond.FACE_DOWN));
+        }
+        boolean toysOn = GlyphSettings.flag(getContentResolver(), GlyphSettings.TOYS);
+        String id = toysOn ? org.openglyph.core.Automation.pick(rules, automationState()) : null;
+        mHandler.removeCallbacks(mAutomationTick);
+        if (org.openglyph.core.Automation.usesTime(rules)) mHandler.postDelayed(mAutomationTick, 60_000);
+        if (java.util.Objects.equals(id, mAutoToy)) return;
+        mAutoToy = id;
+        Log.i(TAG, "automation: " + (id == null ? "none" : id));
+        mToys.setAuto(id, SystemClock.uptimeMillis());
+        mRenderer.invalidate();
+        updateToySensors();
+    }
+
+    private final Runnable mAutomationTick = this::evaluateAutomations;
+
+    private final BroadcastReceiver mAutomationReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            evaluateAutomations();
+        }
+    };
+
+    private final android.media.AudioDeviceCallback mAutomationDevices =
+            new android.media.AudioDeviceCallback() {
+        @Override
+        public void onAudioDevicesAdded(android.media.AudioDeviceInfo[] added) {
+            evaluateAutomations();
+        }
+
+        @Override
+        public void onAudioDevicesRemoved(android.media.AudioDeviceInfo[] removed) {
+            evaluateAutomations();
+        }
+    };
 
     private final IOpenGlyph.Stub mBinder = new IOpenGlyph.Stub() {
         @Override

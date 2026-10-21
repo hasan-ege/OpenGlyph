@@ -37,6 +37,12 @@
             android:title="@string/settings_toys_tile"
             android:summary="@string/settings_toys_tile_summary"
             app:tileSwitch="true" />
+
+        <org.openglyph.TilePreference
+            android:key="automations"
+            android:title="@string/settings_automations"
+            android:summary="@string/settings_automations_short"
+            android:icon="@drawable/ic_og_manage" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -89,30 +95,6 @@
             android:title="@string/settings_charging"
             android:summary="@string/settings_charging_short"
             android:icon="@drawable/ic_og_charging"
-            app:tileHalf="true"
-            app:tileSwitch="true" />
-
-        <org.openglyph.TilePreference
-            android:key="open_glyph_music"
-            android:title="@string/settings_music"
-            android:summary="@string/settings_music_short"
-            android:icon="@drawable/ic_og_music"
-            app:tileHalf="true"
-            app:tileSwitch="true" />
-
-        <org.openglyph.TilePreference
-            android:key="open_glyph_call_voice"
-            android:title="@string/settings_call_voice"
-            android:summary="@string/settings_call_voice_short"
-            android:icon="@drawable/ic_og_call"
-            app:tileHalf="true"
-            app:tileSwitch="true" />
-
-        <org.openglyph.TilePreference
-            android:key="open_glyph_progress"
-            android:title="@string/settings_progress"
-            android:summary="@string/settings_progress_short"
-            android:icon="@drawable/ic_og_progress"
             app:tileHalf="true"
             app:tileSwitch="true" />
 

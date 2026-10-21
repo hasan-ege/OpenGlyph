@@ -230,4 +230,33 @@
     <string name="ek_choose_app">Choose an app…</string>
     <string name="ek_none">No Action</string>
     <string name="ek_none_desc">Do nothing.</string>
+    <string name="toy_visualizer">Visualiser</string>
+    <string name="toy_visualizer_summary">The sound playing on the phone, in the chosen mode</string>
+    <string name="toy_callvoice">Call voice</string>
+    <string name="toy_callvoice_summary">The other person\'s voice during a call</string>
+    <string name="toy_progress">Glyph Progress</string>
+    <string name="toy_progress_summary">Progress of a Live Update: delivery, ride, download</string>
+    <string name="settings_automations">Automations</string>
+    <string name="settings_automations_short">Show a toy by itself when…</string>
+    <string name="automation_rules_title">Rules (the top one wins)</string>
+    <string name="automation_rule">If %1$s → %2$s</string>
+    <string name="automation_no_cond">(no condition yet)</string>
+    <string name="automation_any_app">Any app</string>
+    <string name="automation_only_apps">Only: %1$s</string>
+    <string name="automation_add">Add rule</string>
+    <string name="automation_reset">Back to the default rules</string>
+    <string name="automation_footer">A toy you pick with the Glyph Button always comes first. When none is on the matrix, the first rule whose conditions all hold shows its toy, for as long as they hold. Notifications and calls appear over everything.</string>
+    <string name="automation_edit_toy">Toy</string>
+    <string name="automation_edit_conds">Conditions (all must hold)</string>
+    <string name="automation_edit_apps">Apps for \"sound is playing\"</string>
+    <string name="automation_edit_time">Time of day</string>
+    <string name="automation_set_time">Set start and end</string>
+    <string name="automation_no_time">Any time</string>
+    <string name="automation_move_up">Move up</string>
+    <string name="automation_move_down">Move down</string>
+    <string name="automation_delete">Delete rule</string>
+    <plurals name="automation_rules">
+        <item quantity="one">%d rule on</item>
+        <item quantity="other">%d rules on</item>
+    </plurals>
 </resources>

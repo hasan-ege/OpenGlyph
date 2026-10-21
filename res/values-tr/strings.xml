@@ -220,4 +220,33 @@
     <string name="ek_choose_app">Uygulama seç…</string>
     <string name="ek_none">İşlem Yok</string>
     <string name="ek_none_desc">Hiçbir şey yapma.</string>
+    <string name="toy_visualizer">Görselleştirici</string>
+    <string name="toy_visualizer_summary">Telefonda çalan ses, seçili modda</string>
+    <string name="toy_callvoice">Arama sesi</string>
+    <string name="toy_callvoice_summary">Aramada karşıdakinin sesi</string>
+    <string name="toy_progress">Glyph İlerleme</string>
+    <string name="toy_progress_summary">Live Update ilerlemesi: teslimat, yolculuk, indirme</string>
+    <string name="settings_automations">Otomasyonlar</string>
+    <string name="settings_automations_short">Şu olunca oyuncağı kendiliğinden göster…</string>
+    <string name="automation_rules_title">Kurallar (üstteki kazanır)</string>
+    <string name="automation_rule">Eğer %1$s → %2$s</string>
+    <string name="automation_no_cond">(henüz koşul yok)</string>
+    <string name="automation_any_app">Tüm uygulamalar</string>
+    <string name="automation_only_apps">Yalnızca: %1$s</string>
+    <string name="automation_add">Kural ekle</string>
+    <string name="automation_reset">Varsayılan kurallara dön</string>
+    <string name="automation_footer">Glyph tuşuyla seçtiğin oyuncak her zaman önce gelir. Matriste oyuncak yokken, koşullarının hepsi sağlanan ilk kural kendi oyuncağını gösterir; koşullar sürdükçe ekranda kalır. Bildirimler ve aramalar her şeyin üstünde görünür.</string>
+    <string name="automation_edit_toy">Oyuncak</string>
+    <string name="automation_edit_conds">Koşullar (hepsi sağlanmalı)</string>
+    <string name="automation_edit_apps">\"Ses çalıyor\" için uygulamalar</string>
+    <string name="automation_edit_time">Günün saati</string>
+    <string name="automation_set_time">Başlangıç ve bitiş seç</string>
+    <string name="automation_no_time">Her zaman</string>
+    <string name="automation_move_up">Yukarı taşı</string>
+    <string name="automation_move_down">Aşağı taşı</string>
+    <string name="automation_delete">Kuralı sil</string>
+    <plurals name="automation_rules">
+        <item quantity="one">%d kural açık</item>
+        <item quantity="other">%d kural açık</item>
+    </plurals>
 </resources>

@@ -50,6 +50,10 @@ final class GlyphSettings {
     static final String ENGINE = "open_glyph_engine";                // DIODE|CHEMICAL
     /** During a call, the other person's voice as a waveform. */
     static final String CALL_VOICE = "open_glyph_call_voice";        // 1/0, default 1
+    /** Automation rules, core/Automation format; unset = the default rules. */
+    static final String AUTOMATIONS = "open_glyph_automations";
+    /** Set once the visualiser joined an existing button order. */
+    static final String TOYS_V3 = "open_glyph_toys_v3";
     /** Visualiser mode for music and call voice. */
     static final String VIS_MODE = "open_glyph_visualizer_mode";     // FIXED|MOVING, default FIXED
     static final String CLOCK_FACE = "open_glyph_clock_face";        // 0..Clock.FACES-1, default 0
@@ -60,7 +64,7 @@ final class GlyphSettings {
         ENABLED, BRIGHTNESS, NOTIFICATIONS, CHARGING, CALLS, RECORD_LED, TOYS,
         AOD, BEDTIME, BEDTIME_START, BEDTIME_END, BEDTIME_DAYS, FLIP, ESSENTIAL_RULES,
         AOD_TOY, TOY_ORDER, MUSIC, GEN_SOUNDS, GEN_RINGTONE, FLIP_MODE, POCKET, AUTO_BRIGHTNESS, PROGRESS, ENGINE, SEED,
-        CLOCK_FACE, TOY_TIMEOUT, CALL_VOICE, VIS_MODE,
+        CLOCK_FACE, TOY_TIMEOUT, CALL_VOICE, VIS_MODE, AUTOMATIONS,
     };
 
     private GlyphSettings() {}
@@ -115,6 +119,7 @@ final class GlyphSettings {
             for (org.openglyph.toys.Toy t : org.openglyph.toys.Toys.all()) {
                 if (!OFF.equals(t.id())) out.add(t.id());
             }
+            out.add(Math.min(1, out.size()), VISUALIZER);
             return out;
         }
         for (String id : order.split(",")) {
@@ -124,6 +129,21 @@ final class GlyphSettings {
     }
 
     static final String OFF = "off";
+    static final String VISUALIZER = "visualizer";
+
+    /** Once: the visualiser became a toy, so it joins a button order saved before that. */
+    static void migrateToysV3(ContentResolver cr) {
+        if (Settings.Secure.getInt(cr, TOYS_V3, 0) != 0) return;
+        String order = Settings.Secure.getString(cr, TOY_ORDER);
+        if (order != null) {
+            List<String> ids = activeToys(cr);
+            if (!ids.contains(VISUALIZER)) {
+                ids.add(Math.min(1, ids.size()), VISUALIZER);
+                setActiveToys(cr, ids);
+            }
+        }
+        Settings.Secure.putInt(cr, TOYS_V3, 1);
+    }
 
     static void setActiveToys(ContentResolver cr, List<String> ids) {
         Settings.Secure.putString(cr, TOY_ORDER, String.join(",", ids));

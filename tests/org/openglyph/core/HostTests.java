@@ -97,10 +97,53 @@ public final class HostTests {
         host.onLongPress(20200);
         check(host.selected() == sw && sw.isRunning(), "long press reaches the selected toy");
         check(host.isActive(20200 + 60000), "running stopwatch keeps the toy on screen");
+        // Automations: the picked toy first, then the first matching rule's toy
+        {
+            org.openglyph.toys.ToyHost ah = new org.openglyph.toys.ToyHost(() -> ctx, clock, battery, sw);
+            ah.setTimeoutMs(30000);
+            ah.setAuto("battery", 0);
+            check(ah.isActive(10) && ah.auto() == battery, "automation toy shows when nothing is picked");
+            ah.onTap(100);
+            Frame af = new Frame();
+            check(ah.isActive(200) && ah.selected() == clock, "a button press picks a toy over the automation");
+            check(ah.isActive(100 + 29000) && ah.selected() == clock, "the picked toy stays its timeout");
+            check(ah.isActive(100 + 31000) && ah.selected() == null && ah.auto() == battery,
+                    "after the timeout the automation toy is back");
+            ah.setAuto(null, 40000);
+            check(!ah.isActive(40001), "rule gone: the matrix is free");
+        }
+        {
+            java.util.List<Automation.Rule> rules = Automation.defaults();
+            Automation.State st = new Automation.State();
+            check(Automation.pick(rules, st) == null, "no condition, no toy");
+            st.soundApps.add("com.spotify.music");
+            check("visualizer".equals(Automation.pick(rules, st)), "sound playing: the visualiser");
+            st.timer = true;
+            check("hourglass".equals(Automation.pick(rules, st)), "a timer beats music (higher rule)");
+            st.call = true;
+            check("callvoice".equals(Automation.pick(rules, st)), "a call beats everything");
+            Automation.Rule only = new Automation.Rule("visualizer", Automation.Cond.SOUND);
+            only.apps.add("com.spotify.music");
+            Automation.State yt = new Automation.State();
+            yt.soundApps.add("com.google.android.youtube");
+            check(!only.matches(yt), "app whitelist: other apps do not count");
+            Automation.Rule night = new Automation.Rule("clock", Automation.Cond.FACE_DOWN);
+            night.start = 22 * 60; night.end = 7 * 60;
+            Automation.State n = new Automation.State();
+            n.faceDown = true; n.minuteOfDay = 23 * 60;
+            boolean in = night.matches(n);
+            n.minuteOfDay = 12 * 60;
+            check(in && !night.matches(n), "time ranges wrap past midnight");
+            java.util.List<Automation.Rule> back = Automation.parse(Automation.format(java.util.List.of(only, night)));
+            check(back.size() == 2 && back.get(0).apps.contains("com.spotify.music") && back.get(1).start == 22 * 60
+                    && back.get(1).conds.contains(Automation.Cond.FACE_DOWN), "rules round-trip through the setting");
+            check(Automation.parse(null).size() == 4 && Automation.parse("").isEmpty(), "unset: defaults; empty: no rules");
+        }
+
         // Glyph Toys timeout (the stock setting, one value for every toy)
         {
             org.openglyph.toys.ToyHost th = new org.openglyph.toys.ToyHost(() -> ctx, clock, battery);
-            check(th.timeoutMs() == 15000, "default toy timeout is 15 s");
+            check(th.timeoutMs() == 30000, "default toy timeout is 30 s");
             th.setTimeoutMs(60000);
             th.onTap(0);
             check(th.isActive(59000) && !th.isActive(60001), "toy stays on for the chosen timeout");

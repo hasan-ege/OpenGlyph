@@ -59,6 +59,28 @@ final class IdleController implements SensorEventListener {
     private boolean mBatteryLow;
     private boolean mFaceDown;
     private boolean mSensorOn;
+    /** An automation rule needs "face down", so the accelerometer runs for it too. */
+    private boolean mAutoFaceDown;
+    /** Told after every evaluation (screen, face, charger changes): automations re-check. */
+    private Runnable mStateListener = () -> {};
+
+    void setStateListener(Runnable r) {
+        mStateListener = r;
+    }
+
+    void setAutomationFaceDown(boolean on) {
+        if (on == mAutoFaceDown) return;
+        mAutoFaceDown = on;
+        update();
+    }
+
+    boolean isScreenOff() {
+        return mScreenOff;
+    }
+
+    boolean isFaceDown() {
+        return mFaceDown;
+    }
     private boolean mAlarmSet;
     private int mSavedRingerMode = -1;
 
@@ -117,7 +139,7 @@ final class IdleController implements SensorEventListener {
         boolean flip = enabled && GlyphSettings.flagDefaultOff(cr, GlyphSettings.FLIP);
 
         // The accelerometer only runs while something needs "face down".
-        setSensor(flip || mode == AodPolicy.Mode.FACE_DOWN);
+        setSensor(flip || mode == AodPolicy.Mode.FACE_DOWN || mAutoFaceDown);
         if (!flip) restoreRinger();
 
         Calendar now = Calendar.getInstance();
@@ -135,6 +157,7 @@ final class IdleController implements SensorEventListener {
         mIdle.setAlwaysOn(show);
         if (show) scheduleMinuteAlarm(); else cancelMinuteAlarm();
         mAodListener.onAod(show);
+        mStateListener.run();
         mInvalidate.run();
     }
 
